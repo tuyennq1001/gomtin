@@ -6,15 +6,17 @@
 
 const { powerMonitor, systemPreferences } = require('electron');
 const { hashPassword, verifyPassword, isAcceptable, Throttle, MIN_LENGTH } = require('./password');
+const { tr } = require('./ui/i18n');
 
 class AppLock {
   /**
-   * @param {object} deps { settings, overlay, onChange() }
+   * @param {object} deps { settings, overlay, onChange(), appName }
    */
-  constructor({ settings, overlay, onChange }) {
+  constructor({ settings, overlay, onChange, appName = 'GomTin' }) {
     this.settings = settings;
     this.overlay = overlay;
     this.onChange = onChange;
+    this.appName = appName;
     this.locked = false;
     this.throttle = new Throttle(undefined, {
       load: () => ({ failures: settings.get('lockFailures'), blockedUntil: settings.get('lockBlockedUntil') }),
@@ -57,22 +59,26 @@ class AppLock {
     this.onChange();
   }
 
+  lang() {
+    return this.settings.get('language');
+  }
+
   async tryPassword(password) {
     if (!this.locked) return { ok: true };
     const wait = this.throttle.waitMs();
-    if (wait > 0) return { ok: false, error: `Too many attempts. Try again in ${Math.ceil(wait / 1000)} s.` };
+    if (wait > 0) return { ok: false, error: tr(this.lang(), 'lockTooMany', { s: Math.ceil(wait / 1000) }) };
     if (verifyPassword(password, this.settings.get('lockSalt'), this.settings.get('lockHash'))) {
       this.unlockNow();
       return { ok: true };
     }
     this.throttle.fail();
-    return { ok: false, error: 'Wrong password.' };
+    return { ok: false, error: tr(this.lang(), 'lockWrongPw') };
   }
 
   async tryTouchId() {
     if (!this.locked || !this.touchIdAvailable()) return { ok: false };
     try {
-      await systemPreferences.promptTouchID('unlock Thrum');
+      await systemPreferences.promptTouchID(tr(this.lang(), 'lockTouchIdPrompt', { app: this.appName }));
       this.unlockNow();
       return { ok: true };
     } catch {
@@ -88,7 +94,7 @@ class AppLock {
 
   async finishSetup(password) {
     if (!this.overlay.has('setup')) return { ok: false };
-    if (!isAcceptable(password)) return { ok: false, error: `Use at least ${MIN_LENGTH} characters.` };
+    if (!isAcceptable(password)) return { ok: false, error: tr(this.lang(), 'setupMinLen', { min: MIN_LENGTH }) };
     const { salt, hash } = hashPassword(password);
     this.settings.set('lockSalt', salt);
     this.settings.set('lockHash', hash);

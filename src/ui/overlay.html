@@ -1,60 +1,70 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi" data-theme="blue" data-mode="dark">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Thrum</title>
+  <title>GomTin</title>
+  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="overlay.css">
 </head>
 <body>
   <main id="card" class="card" aria-live="polite">
-    <svg class="logo" viewBox="160 230 700 640" aria-hidden="true">
-      <path d="M332 286h360c66 0 120 54 120 120v188c0 66-54 120-120 120H452l-112 86c-13 10-32 1-32-15v-77c-57-9-96-58-96-114V406c0-66 54-120 120-120z"/>
-      <path d="M330 500h92l46-84 76 168 46-84h104"/>
-    </svg>
+    <div class="mascot-wrap">
+      <div class="mascot-halo" aria-hidden="true"></div>
+      <img src="../assets/mascot.svg" class="mascot-img" width="84" height="84" alt="">
+      <span id="overlay-dev" class="dev-pill" hidden>DEV</span>
+    </div>
 
     <section data-mode="lock" hidden>
-      <h1>Thrum is locked</h1>
+      <h1 id="lock-title">GomTin đang khóa</h1>
+      <p id="lock-sub" class="muted">Nhập mật khẩu ứng dụng để tiếp tục trò chuyện.</p>
       <form id="unlock-form" autocomplete="off">
-        <label class="sr" for="unlock-password">Password</label>
-        <input id="unlock-password" type="password" placeholder="Password" maxlength="256" autocomplete="current-password" required>
-        <button type="submit" class="primary">Unlock</button>
+        <label class="sr" for="unlock-password" id="lock-pw-label">Mật khẩu</label>
+        <input id="unlock-password" type="password" placeholder="Mật khẩu" maxlength="256" autocomplete="current-password" required>
+        <button id="lock-submit" type="submit" class="primary">Mở khóa</button>
       </form>
-      <button id="touchid" type="button" class="secondary" hidden>Use Touch ID</button>
+      <button id="touchid" type="button" class="secondary" hidden>Mở bằng Touch ID</button>
       <p class="error" id="unlock-error" role="alert"></p>
-      <button id="forgot" type="button" class="link">Forgot password? Log out and reset…</button>
+      <button id="forgot" type="button" class="link">Quên mật khẩu? Đăng xuất &amp; đặt lại…</button>
     </section>
 
     <section data-mode="setup" hidden>
-      <h1>Set an app password</h1>
-      <p class="muted">You'll need it to open Thrum. It is stored only as a salted hash on this computer.</p>
+      <h1 id="setup-title">Đặt mật khẩu ứng dụng</h1>
+      <p id="setup-sub" class="muted">Dùng để bảo vệ các cuộc trò chuyện trong GomTin.</p>
       <form id="setup-form" autocomplete="off">
-        <label class="sr" for="setup-password">New password</label>
-        <input id="setup-password" type="password" placeholder="New password (6+ characters)" minlength="6" maxlength="256" autocomplete="new-password" required>
-        <label class="sr" for="setup-confirm">Confirm password</label>
-        <input id="setup-confirm" type="password" placeholder="Confirm password" minlength="6" maxlength="256" autocomplete="new-password" required>
+        <label class="sr" for="setup-password" id="setup-new-label">Mật khẩu mới</label>
+        <input id="setup-password" type="password" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)" minlength="6" maxlength="256" autocomplete="new-password" required>
+        <label class="sr" for="setup-confirm" id="setup-confirm-label">Nhập lại mật khẩu</label>
+        <input id="setup-confirm" type="password" placeholder="Nhập lại mật khẩu" minlength="6" maxlength="256" autocomplete="new-password" required>
         <div class="row">
-          <button type="button" id="setup-cancel" class="secondary">Cancel</button>
-          <button type="submit" class="primary">Turn on lock</button>
+          <button type="button" id="setup-cancel" class="secondary">Hủy</button>
+          <button type="submit" id="setup-submit" class="primary">Bật khóa ứng dụng</button>
         </div>
       </form>
       <p class="error" id="setup-error" role="alert"></p>
     </section>
 
     <section data-mode="offline" hidden>
-      <h1>Can't reach Facebook</h1>
-      <p class="muted">Check your internet connection. Thrum will reconnect automatically.</p>
-      <p class="status"><span class="spinner" aria-hidden="true"></span><span id="offline-status">Retrying…</span></p>
-      <button id="offline-retry" type="button" class="primary">Try now</button>
+      <h1 id="offline-title">Không thể kết nối mạng</h1>
+      <p id="offline-sub" class="muted">Kiểm tra lại đường truyền Internet. GomTin sẽ tự động kết nối lại.</p>
+      <p class="status"><span class="spinner" aria-hidden="true"></span><span id="offline-status">Đang thử kết nối lại…</span></p>
+      <button id="offline-retry" type="button" class="primary">Thử ngay</button>
     </section>
 
     <section data-mode="crashed" hidden>
-      <h1>Something went wrong</h1>
-      <p class="muted">The page stopped responding several times in a row.</p>
-      <button id="crashed-retry" type="button" class="primary">Reload</button>
+      <h1 id="crashed-title">Trang trò chuyện tạm dừng</h1>
+      <p id="crashed-sub" class="muted">Kênh chat không phản hồi nhiều lần liên tiếp. Hãy tải lại để tiếp tục.</p>
+      <button id="crashed-retry" type="button" class="primary">Tải lại</button>
+    </section>
+
+    <section data-mode="empty" hidden>
+      <h1 id="empty-title">Tất cả tài khoản đang tắt</h1>
+      <p id="empty-sub" class="muted">Bật lại tài khoản trong Cài đặt, hoặc nhấn dấu + ở thanh bên để thêm Messenger, Zalo hoặc Telegram.</p>
+      <button id="empty-settings" type="button" class="primary">Mở Cài đặt</button>
     </section>
   </main>
+  <script src="i18n.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

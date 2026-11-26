@@ -9,6 +9,7 @@
 // "Resume" turns notifications back on until that period ends.
 
 const { focusEnd } = require('./focus');
+const { tr } = require('./ui/i18n');
 
 const HOUR = 60 * 60 * 1000;
 
@@ -96,8 +97,14 @@ class Dnd {
     }
   }
 
-  label() {
+  label(lang) {
     const until = this.settings.get('dndUntil');
+    if (lang) {
+      if (until === -1) return tr(lang, 'dndPausedUntilResumed');
+      if (until > this.now()) return tr(lang, 'dndPausedUntil', { time: fmt(until) });
+      if (this.focusPaused()) return tr(lang, 'dndFocusUntil', { time: fmt(this.focusUntil()) });
+      return null;
+    }
     if (until === -1) return 'Notifications paused';
     if (until > this.now()) return `Notifications paused until ${fmt(until)}`;
     if (this.focusPaused()) return `Focus time until ${fmt(this.focusUntil())}`;

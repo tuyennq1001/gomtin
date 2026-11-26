@@ -1,0 +1,141 @@
+/* Shared Soft Kawaii Glass design tokens for GomTin (inspired by Buzzy).
+ * Supports 6 pastel accent themes and automatic Light / Dark surfaces. */
+
+:root {
+  --font: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Default theme: Sky Blue (Buzzy default) */
+  --accent: #3B94F6;
+  --accent-light: #93C5FD;
+  --accent-rgb: 59, 148, 246;
+  --soft-tint-bg: #EFF6FF;
+
+  --accent-grad: linear-gradient(135deg, var(--accent-light), var(--accent));
+  --accent-tint: rgba(var(--accent-rgb), 0.14);
+  --accent-tint-strong: rgba(var(--accent-rgb), 0.22);
+  --accent-border: rgba(var(--accent-rgb), 0.30);
+  --accent-shadow: rgba(var(--accent-rgb), 0.30);
+
+  --danger: #EF4E55;
+  --danger-grad: linear-gradient(135deg, #FF6B73, #EF4E55);
+  --dev-orange: #F98B3E;
+  --dev-tint: rgba(249, 139, 62, 0.16);
+  --dev-border: rgba(249, 139, 62, 0.38);
+
+  /* Dark mode surface defaults (Buzzy charcoal aesthetic) */
+  --bg: #151821;
+  --bg-grad: radial-gradient(circle at 50% -10%, rgba(var(--accent-rgb), 0.16), transparent 56%), #151821;
+  --rail-bg: #13161E;
+  --rail-border: rgba(255, 255, 255, 0.08);
+  --card: rgba(28, 32, 44, 0.88);
+  --card-solid: #1C202C;
+  --card-border: rgba(255, 255, 255, 0.10);
+  --card-top-sheen: rgba(255, 255, 255, 0.12);
+  --card-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --control-bg: rgba(255, 255, 255, 0.065);
+  --control-hover: rgba(255, 255, 255, 0.115);
+  --control-active: rgba(255, 255, 255, 0.16);
+  --control-border: rgba(255, 255, 255, 0.11);
+  --input-bg: rgba(15, 18, 26, 0.72);
+  --text: #F4F6FA;
+  --muted: #9AA3B5;
+  --divider: rgba(255, 255, 255, 0.08);
+  --error: #FF787E;
+  --pill-track: rgba(255, 255, 255, 0.06);
+  --toggle-off: rgba(255, 255, 255, 0.16);
+  --sleep-bg: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+
+/* 6 Buzzy Handpicked Pastel Themes */
+:root[data-theme="blue"] {
+  --accent: #3B94F6;
+  --accent-light: #93C5FD;
+  --accent-rgb: 59, 148, 246;
+  --soft-tint-bg: #EFF6FF;
+}
+:root[data-theme="green"] {
+  --accent: #2DC287;
+  --accent-light: #6EE7B7;
+  --accent-rgb: 45, 194, 135;
+  --soft-tint-bg: #F0FDF4;
+}
+:root[data-theme="pink"] {
+  --accent: #F472B6;
+  --accent-light: #F9A8D4;
+  --accent-rgb: 244, 114, 182;
+  --soft-tint-bg: #FDF2F8;
+}
+:root[data-theme="orange"] {
+  --accent: #F98B3E;
+  --accent-light: #FDBA74;
+  --accent-rgb: 249, 139, 62;
+  --soft-tint-bg: #FFF7ED;
+}
+:root[data-theme="purple"] {
+  --accent: #A870F6;
+  --accent-light: #D8B4FE;
+  --accent-rgb: 168, 112, 246;
+  --soft-tint-bg: #F5F3FF;
+}
+:root[data-theme="red"] {
+  --accent: #EF4E55;
+  --accent-light: #FF6B73;
+  --accent-rgb: 239, 78, 85;
+  --soft-tint-bg: #FEF2F2;
+}
+
+/* Light Mode — Soft Kawaii Glass surface (Buzzy style) */
+:root[data-mode="light"] {
+  --bg: #F4F7FB;
+  --bg-grad: radial-gradient(circle at 50% -10%, var(--soft-tint-bg), transparent 62%), #F4F7FB;
+  --rail-bg: #EEF3F9;
+  --rail-border: rgba(15, 23, 42, 0.08);
+  --card: rgba(255, 255, 255, 0.90);
+  --card-solid: #FFFFFF;
+  --card-border: rgba(var(--accent-rgb), 0.18);
+  --card-top-sheen: rgba(255, 255, 255, 0.92);
+  --card-shadow: 0 8px 22px rgba(var(--accent-rgb), 0.10), 0 1px 2px rgba(15, 23, 42, 0.05);
+  --control-bg: rgba(15, 23, 42, 0.045);
+  --control-hover: rgba(var(--accent-rgb), 0.10);
+  --control-active: rgba(var(--accent-rgb), 0.15);
+  --control-border: rgba(15, 23, 42, 0.10);
+  --input-bg: rgba(255, 255, 255, 0.95);
+  --text: #1E2433;
+  --muted: #647087;
+  --divider: rgba(15, 23, 42, 0.07);
+  --error: #DC3545;
+  --pill-track: rgba(15, 23, 42, 0.055);
+  --toggle-off: rgba(15, 23, 42, 0.16);
+  --sleep-bg: rgba(15, 23, 42, 0.06);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+/* Buzzy-style DEV capsule pill */
+.dev-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--dev-tint);
+  border: 1px solid var(--dev-border);
+  color: var(--dev-orange);
+  font-family: var(--font);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

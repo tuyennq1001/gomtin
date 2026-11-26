@@ -1,27 +1,48 @@
 'use strict';
 
 const {
-  app, BaseWindow, Menu, shell, session, dialog, globalShortcut, Notification, clipboard, nativeImage,
+  app, BaseWindow, Menu, shell, session, dialog, globalShortcut, nativeImage, nativeTheme,
 } = require('electron');
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
-const { classify, isFacebookUrl, isCallUrl, downloadTarget, HOME_URL } = require('./routes');
-const { handleDisplayMediaRequest } = require('./screen-share');
-const { Settings, isChatPath, cleanName, LOCK_MINUTES, MAX_ACCOUNTS } = require('./settings');
+const pkg = require('../package.json');
+const { DEFAULT_SERVICE, SERVICE_LIST, isValidService, getService } = require('./services');
+const { classify, isServiceUrl, isCallUrl, downloadTarget, homeUrlFor } = require('./routes');
+const { createDisplayMediaHandler } = require('./screen-share');
+const {
+  Settings, isChatPath, cleanName, LOCK_MINUTES, MAX_ACCOUNTS, THEME_COLORS, APPEARANCES, LANGUAGES,
+} = require('./settings');
+const { migrateLegacyUserData } = require('./migrate');
+const { tr } = require('./ui/i18n');
 const { AccountView, partitionFor } = require('./account-view');
 const { isAppPage } = require('./app-pages');
 const { AppTray } = require('./tray');
 const { Overlay } = require('./overlay');
+const { Sidebar, SIDEBAR_WIDTH } = require('./sidebar');
 const { AppLock } = require('./lock');
 const { Dnd, HOUR } = require('./dnd');
 const { normalizeRules, MAX_RULES } = require('./focus');
-const { Updater, updateCommand, downloadReleaseFile } = require('./updater');
-const selfUpdate = require('./self-update');
 const { SettingsWindow } = require('./settings-window');
+const { Updater } = require('./updater');
 
-// Must match build.appId: Windows ties notifications to this ID.
-const APP_ID = 'io.github.thangldw.thrum';
+// Dev vs Prod environment separation: Dev uses its own bundle ID, isolated
+// userData folder and clear visual DEV indicators so testing never touches
+// Production sessions.
+const IS_DEV = !app.isPackaged || pkg.env === 'development' || process.env.NODE_ENV === 'development';
+const APP_ID = IS_DEV ? 'com.tuyennq.gomtin.dev' : 'com.tuyennq.gomtin';
+const APP_NAME = IS_DEV ? 'GomTin Dev' : 'GomTin';
+const LEGACY_APP_NAME = IS_DEV ? 'Messenger Dev' : 'Messenger';
+const TITLE_PREFIX = IS_DEV ? '[DEV] ' : '';
+
+const hasCustomUserData = app.commandLine.hasSwitch('user-data-dir');
+if (!hasCustomUserData) {
+  if (!app.isPackaged && IS_DEV) {
+    app.setName(APP_NAME);
+    app.setPath('userData', path.join(app.getPath('appData'), APP_NAME));
+  }
+  migrateLegacyUserData(app.getPath('appData'), LEGACY_APP_NAME, APP_NAME);
+}
+
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 const FB_ORIGIN = 'https://www.facebook.com';
@@ -30,10 +51,8 @@ const FB_ORIGIN = 'https://www.facebook.com';
 const SHORTCUT = isMac ? 'Control+Alt+M' : 'Control+Alt+Shift+M';
 const SHORTCUT_LABEL = isMac ? '⌃⌥M' : 'Ctrl+Alt+Shift+M';
 
-// Hides Facebook's global top bar (Home/Watch/Marketplace...). Best-effort:
-// Facebook class names are obfuscated, so we only rely on ARIA roles.
-// Layout sizes are calc(100vh - var(--header-height)), and theme containers
-// below :root redefine the variable (56px), so it must be zeroed on every element.
+// Hides Facebook's global top bar (Home/Watch/Marketplace...). Applied only
+// to Facebook Messenger accounts.
 const HIDE_TOPBAR_CSS = `
   div[role="banner"] { display: none !important; }
   :root, :root * { --header-height: 0px !important; }
@@ -41,12 +60,10 @@ const HIDE_TOPBAR_CSS = `
 // Privacy screen: blur the page while the window is not focused.
 const PRIVACY_CSS = 'html { filter: blur(24px) saturate(0.6) !important; }';
 
-// Chromium switches that would let another local program get at the Facebook
-// session: a remote-debugging port exposes the page and its cookies over the
-// DevTools protocol (bypassing cookie encryption), and the network switches let
-// it sit between the app and Facebook (a proxy or rewritten DNS, with
-// certificate errors ignored). Fuses already block --inspect; packaged builds
-// refuse these too. A proxy still works through the system proxy settings.
+// Chromium switches that would let another local program get at chat sessions:
+// a remote-debugging port exposes pages and cookies over the DevTools protocol,
+// and network switches let a local process intercept traffic. Packaged builds
+// refuse these; a proxy still works through OS system proxy settings.
 const BLOCKED_SWITCHES = [
   'remote-debugging-port', 'remote-debugging-pipe', 'remote-debugging-address',
   'proxy-server', 'proxy-pac-url', 'host-resolver-rules', 'host-rules',
@@ -56,72 +73,69 @@ if (app.isPackaged && BLOCKED_SWITCHES.some((s) => app.commandLine.hasSwitch(s))
   app.exit(1);
 }
 
-// Up to v0.2 the app was called "Messenger Lite". Move its data folder
-// (settings, accounts, app-lock hash, sessions) to the new name before
-// anything creates the new one. On Windows and Linux the cookie key moves
-// with the folder, so logins survive; on macOS it is in the Keychain under the
-// old name, so Facebook asks you to sign in once.
-// Electron creates the (empty) new folder before this code runs, so "empty"
-// counts as unused; Chromium only writes into it later in startup.
-function migrateFromMessengerLite() {
-  try {
-    const target = app.getPath('userData');
-    const legacy = path.join(app.getPath('appData'), 'Messenger Lite');
-    if (!fs.existsSync(legacy)) return;
-    if (fs.existsSync(target)) {
-      if (fs.readdirSync(target).length > 0) return; // already in use: keep it
-      fs.rmdirSync(target);
-    }
-    fs.renameSync(legacy, target);
-  } catch { /* start with a fresh profile */ }
-}
-migrateFromMessengerLite();
-
 let settings;
 let ephemeral = false;
-// The shell window has no page (and no renderer process) of its own;
-// Facebook runs in one view per account inside it.
+// The shell window has no renderer of its own; each enabled account runs in
+// its own sandboxed WebContentsView alongside the isolated left sidebar view.
 let mainWindow = null;
-const accounts = new Map(); // id -> AccountView
+const accounts = new Map(); // enabled account id -> AccountView
 let activeId = null;
 let tray = null;
+let sidebar = null;
 let overlay = null;
 let lock = null;
 let dnd = null;
-let updater = null;
 let settingsWin = null;
+let updater = null;
+let winBadgeImage = null;
 let isQuitting = false;
 const configuredPartitions = new Set();
-// Call windows and other popups opened by Facebook pages. They are separate
+const sessionServices = new WeakMap(); // Electron.Session -> serviceId
+// Call windows and other popups opened by chat pages. They are separate
 // windows, so the app lock hides them explicitly (see applyVisibility).
 const popups = new Set();
 const hiddenByLock = new Set();
 
 // ---------------------------------------------------------------- helpers
 
-// Facebook serves degraded or "unsupported browser" pages to UAs containing "Electron".
+// Chat web clients may degrade or block UAs containing "Electron".
 function chromeUserAgent() {
+  const escapedName = app.getName().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return app.userAgentFallback
     .replace(/\sElectron\/\S+/, '')
-    .replace(new RegExp(`\\s${app.getName()}\\/\\S+`), '');
+    .replace(new RegExp(`\\s${escapedName}\\/\\S+`), '');
 }
 
 function openExternal(url) {
   if (/^https?:\/\//i.test(url)) shell.openExternal(url);
 }
 
-const active = () => accounts.get(activeId);
+const active = () => (activeId ? accounts.get(activeId) || null : null);
 const accountFor = (wc) => [...accounts.values()].find((a) => a.wc === wc);
-const totalUnread = () => [...accounts.values()].reduce((n, a) => n + a.unread, 0);
+const serviceFor = (wc) => {
+  const acc = accountFor(wc);
+  if (acc) return acc.service;
+  return sessionServices.get(wc.session) || DEFAULT_SERVICE;
+};
+const totalUnread = () => [...accounts.values()].reduce((n, a) => n + (a.unread > 0 ? a.unread : 0), 0);
+const hasAnyUnread = () => [...accounts.values()].some((a) => a.unread > 0 || a.unread === -1);
+
+function enabledAccountConfigs() {
+  return settings ? settings.get('accounts').filter((a) => a.enabled) : [];
+}
 
 function startUrlFor(acc) {
-  const last = settings.get('lastChats')[acc.id];
-  if (settings.get('restoreLastChat') && !ephemeral && isChatPath(last)) return FB_ORIGIN + last;
-  return HOME_URL;
+  const svc = getService(acc.service);
+  if (svc.supportsLastChat) {
+    const last = settings.get('lastChats')[acc.id];
+    if (settings.get('restoreLastChat') && !ephemeral && isChatPath(last)) return FB_ORIGIN + last;
+  }
+  return svc.homeUrl;
 }
 
 const saveChatTimers = new Map();
 function rememberChat(acc, url) {
+  if (!getService(acc.service).supportsLastChat) return;
   if (!settings.get('restoreLastChat') || ephemeral) return;
   let p;
   try { p = new URL(url).pathname; } catch { return; }
@@ -138,7 +152,8 @@ function notificationsAllowed() {
 }
 
 function applyCss(acc) {
-  acc.setCss('topbar', HIDE_TOPBAR_CSS, settings.get('hideTopBar'));
+  const hideTop = getService(acc.service).supportsHideTopBar && settings.get('hideTopBar');
+  acc.setCss('topbar', HIDE_TOPBAR_CSS, hideTop);
   acc.setCss('privacy', PRIVACY_CSS, settings.get('privacyScreen') && !(mainWindow && mainWindow.isFocused()));
 }
 
@@ -146,21 +161,100 @@ function applyCssAll() {
   for (const acc of accounts.values()) applyCss(acc);
 }
 
+// Silence in-page notification chimes while DND / Focus schedule is active.
+// Separate call popups live in their own BrowserWindows and stay unmuted.
+function applyAudioMute() {
+  const muted = Boolean(dnd && dnd.isPaused() && settings.get('muteAudioWhenPaused'));
+  for (const acc of accounts.values()) {
+    if (!acc.wc.isDestroyed()) acc.wc.setAudioMuted(muted);
+  }
+}
+
+const lang = () => (settings ? settings.get('language') : 'vi');
+const t = (key, vars) => tr(lang(), key, vars);
+
+function isDarkMode() {
+  return nativeTheme.shouldUseDarkColors;
+}
+
+function surfaceBgHex() {
+  return isDarkMode() ? '#151821' : '#F4F7FB';
+}
+
+function railBgHex() {
+  return isDarkMode() ? '#13161E' : '#EEF3F9';
+}
+
+function uiThemeState() {
+  return {
+    themeColor: settings ? settings.get('themeColor') : 'blue',
+    appearance: settings ? settings.get('appearance') : 'system',
+    resolvedTheme: isDarkMode() ? 'dark' : 'light',
+    language: lang(),
+    appName: APP_NAME,
+    isDev: IS_DEV,
+  };
+}
+
+function applyAppearance() {
+  if (settings) nativeTheme.themeSource = settings.get('appearance');
+  const surface = surfaceBgHex();
+  const rail = railBgHex();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setBackgroundColor(surface);
+  if (sidebar) sidebar.setBackgroundColor(rail);
+  if (overlay) overlay.setBackgroundColor(surface);
+  if (settingsWin) settingsWin.setBackgroundColor(surface);
+  pushUi();
+}
+
+function setAppearance({ themeColor, appearance, language } = {}) {
+  let langChanged = false;
+  if (themeColor !== undefined && THEME_COLORS.includes(themeColor)) {
+    settings.set('themeColor', themeColor);
+  }
+  if (appearance !== undefined && APPEARANCES.includes(appearance)) {
+    settings.set('appearance', appearance);
+  }
+  if (language !== undefined && LANGUAGES.includes(language)) {
+    langChanged = settings.get('language') !== language;
+    settings.set('language', language);
+  }
+  applyAppearance();
+  if (langChanged) {
+    updateTitle();
+    refreshStatus();
+    rebuildMenus();
+  }
+  return { ok: true };
+}
+
 function confirmParent() {
   return mainWindow && mainWindow.isVisible() ? mainWindow : null;
 }
 
 async function confirm(message, detail, okLabel) {
-  const options = { type: 'question', message, detail, buttons: [okLabel, 'Cancel'], defaultId: 0, cancelId: 1 };
+  const options = { type: 'question', message, detail, buttons: [okLabel, t('cancel')], defaultId: 0, cancelId: 1 };
   const parent = confirmParent();
   const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
   return response === 0;
 }
 
+function pushUi() {
+  if (sidebar) sidebar.push();
+  if (settingsWin) settingsWin.push();
+  if (overlay && overlay.visible) overlay.push();
+}
+
 // ---------------------------------------------------------------- window
+
+function sidebarInset() {
+  if (!sidebar || !settings || !settings.get('showSidebar') || (lock && lock.locked)) return 0;
+  return SIDEBAR_WIDTH;
+}
 
 function focusActive() {
   if (overlay && overlay.visible) overlay.focus();
+  else if (settingsWin && settingsWin.visible) settingsWin.focus();
   else if (active()) active().wc.focus();
 }
 
@@ -180,43 +274,85 @@ function toggleWindow() {
 function layout() {
   if (!mainWindow) return;
   const [width, height] = mainWindow.getContentSize();
-  for (const acc of accounts.values()) acc.view.setBounds({ x: 0, y: 0, width, height });
-  if (overlay) overlay.layout();
+  const inset = sidebarInset();
+  if (sidebar) sidebar.layout();
+  const chatWidth = Math.max(0, width - inset);
+  for (const acc of accounts.values()) acc.view.setBounds({ x: inset, y: 0, width: chatWidth, height });
+  if (settingsWin) settingsWin.layout(inset);
+  if (overlay) overlay.layout(inset);
 }
 
 function updateTitle() {
   if (!mainWindow) return;
   const total = totalUnread();
-  const name = accounts.size > 1 && active() ? ` — ${active().name}` : '';
-  mainWindow.setTitle(`${total > 0 ? `(${total}) ` : ''}Thrum${name}`);
+  const cur = active();
+  const prefix = total > 0 ? `(${total}) ` : (hasAnyUnread() ? '• ' : '');
+  const suffix = cur && (accounts.size > 1 || cur.service !== DEFAULT_SERVICE) ? ` — ${cur.name}` : '';
+  mainWindow.setTitle(`${prefix}${TITLE_PREFIX}${APP_NAME}${suffix}`);
 }
 
 function onUnread() {
   const total = totalUnread();
-  app.setBadgeCount(total); // macOS dock, supported Linux launchers
+  const anyUnread = hasAnyUnread();
+  if (total > 0) {
+    app.setBadgeCount(total); // macOS dock, supported Linux launchers
+  } else if (anyUnread) {
+    if (isMac && app.dock) app.dock.setBadge('•');
+    else app.setBadgeCount(0);
+  } else {
+    app.setBadgeCount(0);
+    if (isMac && app.dock) app.dock.setBadge('');
+  }
   if (isWin && mainWindow) {
-    const badge = nativeImage.createFromPath(path.join(__dirname, 'assets', 'badge.png'));
-    mainWindow.setOverlayIcon(total > 0 ? badge : null, total > 0 ? `${total} unread` : '');
+    if (!winBadgeImage) winBadgeImage = nativeImage.createFromPath(path.join(__dirname, 'assets', 'badge.png'));
+    const desc = total > 0 ? t('unreadCount', { n: total }) : (anyUnread ? t('unreadCount', { n: '•' }) : '');
+    mainWindow.setOverlayIcon(anyUnread ? winBadgeImage : null, desc);
   }
   updateTitle();
   if (lock && dnd) buildAppMenu(); // unread counts in the Accounts menu
-  if (tray) tray.setUnread(total, { paused: dnd.isPaused() });
-  if (settingsWin) settingsWin.push();
+  if (tray) {
+    const count = total > 0 ? total : (anyUnread ? 1 : 0);
+    tray.setUnread(count, {
+      paused: dnd.isPaused(),
+      unreadText: total > 0 ? t('unreadCount', { n: total }) : t('unreadCount', { n: '•' }),
+      pausedText: t('notificationsPaused'),
+    });
+  }
+  pushUi();
 }
 
-// Show the offline/crashed screen for the account being viewed only.
+// Show the offline/crashed/empty screen for the current pane (hidden while
+// embedded Settings is open so Settings stays interactive even if all accounts are off).
 function refreshStatus() {
+  if (!overlay) return;
+  if (settingsWin && settingsWin.visible) {
+    overlay.setLayer('empty', null);
+    overlay.setLayer('offline', null);
+    overlay.setLayer('crashed', null);
+    overlay.layout(sidebarInset());
+    return;
+  }
   const acc = active();
-  if (!overlay || !acc) return;
-  overlay.setLayer('offline', acc.status.offline);
+  if (!acc) {
+    overlay.setLayer('offline', null);
+    overlay.setLayer('crashed', null);
+    overlay.setLayer('empty', {});
+    overlay.layout(sidebarInset());
+    return;
+  }
+  overlay.setLayer('empty', null);
+  const offline = acc.status.offline ? { ...acc.status.offline, serviceName: getService(acc.service).label } : null;
+  overlay.setLayer('offline', offline);
   overlay.setLayer('crashed', acc.status.crashed);
+  overlay.layout(sidebarInset());
 }
 
 // ---------------------------------------------------------------- guards
 
 // Navigation and window-creation policy, applied to every window the app
 // creates: account views, call windows and any popup they open. App windows
-// have no address bar, so nothing but Facebook may ever render in one.
+// have no address bar, so nothing outside the account's own service may ever
+// render in one.
 function guardContents(wc) {
   const account = () => accountFor(wc);
   // The app's own pages register themselves after creation, so this is checked per event.
@@ -225,44 +361,48 @@ function guardContents(wc) {
   // Full navigations triggered by the page (link clicks, form posts).
   wc.on('will-navigate', (event, url) => {
     if (skip()) { event.preventDefault(); return; }
-    const file = downloadTarget(url);
+    const svc = serviceFor(wc);
+    const file = downloadTarget(url, svc);
     if (file) { event.preventDefault(); wc.downloadURL(file); return; }
-    const kind = classify(url);
+    const kind = classify(url, svc);
     if (kind === 'allowed') return;
     event.preventDefault();
-    if (kind === 'feed') { if (account()) wc.loadURL(HOME_URL); }
+    if (kind === 'feed') { if (account()) wc.loadURL(homeUrlFor(svc)); }
     else openExternal(url);
   });
 
-  // Server redirects may pass through unlisted Facebook paths (login,
-  // checkpoint), but must never land on a third-party site inside the app.
+  // Server redirects may pass through unlisted paths of the service (login,
+  // checkpoint, QR SSO), but must never land on a third-party site in-app.
   wc.on('will-redirect', (event) => {
     if (skip()) { event.preventDefault(); return; }
-    if (!event.isMainFrame || event.url === 'about:blank' || isFacebookUrl(event.url)) return;
+    const svc = serviceFor(wc);
+    if (!event.isMainFrame || event.url === 'about:blank' || isServiceUrl(event.url, svc)) return;
     event.preventDefault();
-    const file = downloadTarget(event.url);
+    const file = downloadTarget(event.url, svc);
     if (file) wc.downloadURL(file); else openExternal(event.url);
   });
 
-  // Last line of defence if a non-Facebook page still loads in an app window.
+  // Last line of defence if a non-service page still loads in an app window.
   wc.on('did-navigate', (_e, url) => {
     if (skip() || url === 'about:blank') return;
-    if (!isFacebookUrl(url)) {
-      if (account()) wc.loadURL(HOME_URL); else wc.close();
+    const svc = serviceFor(wc);
+    if (!isServiceUrl(url, svc)) {
+      if (account()) wc.loadURL(homeUrlFor(svc)); else wc.close();
       return;
     }
-    // Post-login redirect to "/" and similar: back to the inbox.
-    if (account() && classify(url) === 'feed') wc.loadURL(HOME_URL);
+    // Post-login redirect to "/" and similar on Facebook: back to the inbox.
+    if (account() && classify(url, svc) === 'feed') wc.loadURL(homeUrlFor(svc));
   });
 
   wc.setWindowOpenHandler(({ url }) => {
     // A locked app opens nothing: a new window would show above the lock screen.
     if (lock && lock.locked) return { action: 'deny' };
+    const svc = serviceFor(wc);
     // Attachments and "Download" buttons: save the file, never render it.
-    const file = downloadTarget(url);
+    const file = downloadTarget(url, svc);
     if (file) { wc.downloadURL(file); return { action: 'deny' }; }
-    // Call windows must stay in-app to keep the account's session; they get the same guards.
-    if (classify(url) === 'allowed') {
+    // In-service popups (e.g. Facebook call windows) keep the account's session and guards.
+    if (classify(url, svc) === 'allowed') {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
@@ -278,13 +418,11 @@ function guardContents(wc) {
   });
 
   wc.on('did-create-window', (win) => {
-    // A popup starts as about:blank, which the guards above let through, and
-    // its opener can document.write anything into it. Only Facebook's own
-    // frames may hold that handle; a window opened by an embedded third-party
-    // or sandboxed iframe could otherwise show a fake login page with no
-    // address bar. (No opener means "noopener": nothing can script the window.)
+    // A popup starts as about:blank and its opener can document.write into it.
+    // Only the account's own service frames may hold that handle.
     const { opener } = win.webContents;
-    if (opener && !isFacebookUrl(opener.origin)) { win.destroy(); return; }
+    const svc = serviceFor(win.webContents);
+    if (opener && !isServiceUrl(opener.origin, svc)) { win.destroy(); return; }
     trackPopup(win);
   });
 }
@@ -299,13 +437,13 @@ function trackPopup(win) {
 
 function attachAccountBehaviour(acc) {
   const { wc } = acc;
-  // Facebook is an SPA: clicking the logo or a profile name is a pushState.
+  // Chat web apps are SPAs: clicking links may pushState to disallowed routes.
   wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
     if (!isMainFrame) return;
-    const kind = classify(url);
+    const kind = classify(url, acc.service);
     if (kind === 'allowed') { rememberChat(acc, url); return; }
     if (kind !== 'feed') openExternal(url);
-    wc.loadURL(HOME_URL);
+    wc.loadURL(homeUrlFor(acc.service));
   });
   wc.on('did-navigate', (_e, url) => rememberChat(acc, url));
   wc.on('dom-ready', () => applyCss(acc));
@@ -313,30 +451,32 @@ function attachAccountBehaviour(acc) {
 
 // ---------------------------------------------------------------- sessions
 
-function configureSession(partition) {
+function configureSession(partition, service = DEFAULT_SERVICE) {
+  const ses = session.fromPartition(partition);
+  sessionServices.set(ses, service);
   if (configuredPartitions.has(partition)) return;
   configuredPartitions.add(partition);
-  const ses = session.fromPartition(partition);
   ses.setUserAgent(chromeUserAgent());
 
-  // Granted only to Facebook's own frames, never to embedded third-party iframes.
-  // Notifications are additionally withheld while paused (Do Not Disturb) or locked.
+  // Granted only to the account's own service frames, never third-party iframes.
+  // Notifications are additionally withheld while paused (DND) or locked.
   const allowed = new Set(['notifications', 'media', 'display-capture', 'clipboard-sanitized-write', 'fullscreen']);
-  // Microphone and camera additionally need a call window or the user's OK (allowMedia).
   ses.setPermissionRequestHandler((wc, permission, cb, details) => {
-    if (!allowed.has(permission) || !isFacebookUrl(details.requestingUrl)) { cb(false); return; }
+    const svc = sessionServices.get(ses) || service;
+    if (!allowed.has(permission) || !isServiceUrl(details.requestingUrl, svc)) { cb(false); return; }
     if (permission !== 'media') { cb(true); return; }
-    allowMedia(wc, partition, details).then(cb, () => cb(false));
+    allowMedia(wc, partition, svc, details).then(cb, () => cb(false));
   });
   ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
-    if (!allowed.has(permission) || !isFacebookUrl(requestingOrigin)) return false;
+    const svc = sessionServices.get(ses) || service;
+    if (!allowed.has(permission) || !isServiceUrl(requestingOrigin, svc)) return false;
     return permission === 'notifications' ? notificationsAllowed() : true;
   });
   // Spellcheck dictionaries are downloaded from Google's CDN on Windows/Linux;
-  // macOS uses the OS spellchecker. Keep the app's traffic Facebook-only.
+  // macOS uses the OS spellchecker. Keep network traffic strictly chat-only.
   ses.setSpellCheckerEnabled(process.platform === 'darwin');
-  // macOS 15+ shows the native system picker; elsewhere our handler asks for a source.
-  ses.setDisplayMediaRequestHandler(handleDisplayMediaRequest, { useSystemPicker: true });
+  // macOS 15+ shows the native system picker; elsewhere our service-scoped handler asks.
+  ses.setDisplayMediaRequestHandler(createDisplayMediaHandler(service), { useSystemPicker: true });
 
   // Downloads (chat attachments, saved photos): ask where to save, starting in
   // Downloads, and reveal the file when done, like a browser.
@@ -348,18 +488,17 @@ function configureSession(partition) {
   });
 }
 
-// Microphone and camera: granted without asking only to a call window (a
-// popup on a Facebook call page). Anywhere else, e.g. a voice clip recorded in a
-// chat, the user is asked first, as in a browser. Answers can be remembered per
-// account and device until Thrum quits. Nothing new is granted while locked.
+// Microphone and camera: granted without asking only to a dedicated call popup
+// (Facebook Messenger calls). Anywhere else (voice clips, inline Telegram WebRTC
+// calls), the user is asked first, with an option to remember until quit.
 const mediaChoices = new Map(); // "<partition> audio|video" -> boolean
 
-function isCallWindow(wc) {
-  return [...popups].some((win) => !win.isDestroyed() && win.webContents === wc) && isCallUrl(wc.getURL());
+function isCallWindow(wc, service) {
+  return [...popups].some((win) => !win.isDestroyed() && win.webContents === wc) && isCallUrl(wc.getURL(), service);
 }
 
-async function allowMedia(wc, partition, details) {
-  if (isCallWindow(wc)) return true;
+async function allowMedia(wc, partition, service, details) {
+  if (isCallWindow(wc, service)) return true;
   if (lock && lock.locked) return false;
   let types = (details.mediaTypes || []).filter((t) => t === 'audio' || t === 'video');
   if (types.length === 0) types = ['audio', 'video'];
@@ -367,16 +506,20 @@ async function allowMedia(wc, partition, details) {
   if (keys.some((k) => mediaChoices.get(k) === false)) return false;
   if (keys.every((k) => mediaChoices.get(k) === true)) return true;
 
-  const what = types.length === 2 ? 'your microphone and camera' : types[0] === 'video' ? 'your camera' : 'your microphone';
+  const what = types.length === 2 ? t('dlgMediaBoth') : types[0] === 'video' ? t('dlgMediaCam') : t('dlgMediaMic');
   const acc = accountFor(wc);
+  const svcName = getService(service).fullName;
   const options = {
     type: 'question',
-    message: `Allow Facebook to use ${what}?`,
-    detail: `${acc && accounts.size > 1 ? `Account "${acc.name}". ` : ''}Calls that open in their own window can always use them; this request comes from ${new URL(details.requestingUrl).hostname}.`,
-    buttons: ['Allow', "Don't Allow"],
+    message: t('dlgMediaTitle', { service: svcName, what }),
+    detail: t('dlgMediaDetail', {
+      accPrefix: acc && accounts.size > 1 ? t('dlgMediaAccPrefix', { name: acc.name }) : '',
+      host: new URL(details.requestingUrl).hostname,
+    }),
+    buttons: [t('dlgMediaAllow'), t('dlgMediaDeny')],
     defaultId: 1,
     cancelId: 1,
-    checkboxLabel: 'Remember until Thrum quits',
+    checkboxLabel: t('dlgMediaRemember', { app: APP_NAME }),
   };
   const parent = confirmParent();
   const { response, checkboxChecked } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
@@ -397,34 +540,53 @@ async function clearPartition(partition) {
 
 // ---------------------------------------------------------------- accounts
 
-function addAccountView({ id, name }) {
+function mountAccountView({ id, name, service }) {
+  if (accounts.has(id)) return accounts.get(id);
+  const svc = getService(service).id;
   // Before the view exists: a webContents takes its user agent from the session
   // when it is created, so a later setUserAgent would not reach the page.
-  configureSession(partitionFor(id, ephemeral));
+  configureSession(partitionFor(id, ephemeral), svc);
   const acc = new AccountView({
     id,
     name,
+    service: svc,
     ephemeral,
     startUrl: startUrlFor,
     onUnread,
     onStatus: (a) => { if (a.id === activeId) refreshStatus(); },
+    onLoading: () => { if (sidebar) sidebar.push(); },
   });
   attachAccountBehaviour(acc);
   accounts.set(id, acc);
   mainWindow.contentView.addChildView(acc.view);
-  acc.view.setVisible(id === activeId && !(lock && lock.locked));
+  const settingsOpen = Boolean(settingsWin && settingsWin.visible);
+  acc.view.setVisible(id === activeId && !(lock && lock.locked) && !settingsOpen);
   layout();
+  if (settingsWin) settingsWin.raise();
   if (overlay) overlay.raise();
+  applyAudioMute();
   acc.load();
   return acc;
 }
 
-// Only the active account is shown, and none while locked: the views are
-// hidden before the lock screen has even loaded, so nothing shows through.
-// Popups (call windows) are hidden while locked and come back on unlock.
+function unmountAccountView(id) {
+  const acc = accounts.get(id);
+  if (!acc) return;
+  clearTimeout(saveChatTimers.get(id));
+  saveChatTimers.delete(id);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.contentView.removeChildView(acc.view);
+  acc.destroy();
+  accounts.delete(id);
+}
+
+// Only the active account is shown, and none while locked or while embedded
+// Settings is open. Popups (call windows) are hidden while locked and come
+// back on unlock.
 function applyVisibility() {
   const locked = Boolean(lock && lock.locked);
-  for (const acc of accounts.values()) acc.view.setVisible(!locked && acc.id === activeId);
+  const settingsOpen = Boolean(settingsWin && settingsWin.visible && !locked);
+  if (sidebar) sidebar.setVisible(!locked && settings.get('showSidebar'));
+  for (const acc of accounts.values()) acc.view.setVisible(!locked && !settingsOpen && acc.id === activeId);
   if (locked) {
     for (const win of popups) {
       if (!win.isDestroyed() && win.isVisible()) { hiddenByLock.add(win); win.hide(); }
@@ -433,30 +595,49 @@ function applyVisibility() {
     for (const win of hiddenByLock) if (!win.isDestroyed()) win.show();
     hiddenByLock.clear();
   }
+  layout();
 }
 
 function switchAccount(id) {
   if (!accounts.has(id) || (lock && lock.locked)) return;
+  if (settingsWin && settingsWin.visible) settingsWin.close();
   activeId = id;
   if (settings.get('activeAccount') !== id) settings.set('activeAccount', id);
   applyVisibility();
   refreshStatus();
   updateTitle();
   rebuildMenus();
-  if (settingsWin) settingsWin.push();
+  pushUi();
   if (mainWindow && mainWindow.isVisible()) focusActive();
 }
 
-async function addAccount() {
+function nextAccountName(list, serviceId) {
+  const base = getService(serviceId).label;
+  if (!list.some((a) => a.name === base)) return base;
+  let n = 2;
+  while (list.some((a) => a.name === `${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+async function addAccount({ service = DEFAULT_SERVICE, stayInSettings = false } = {}) {
+  const svc = isValidService(service) ? service : DEFAULT_SERVICE;
   const list = settings.get('accounts');
-  if (list.length >= MAX_ACCOUNTS) return { ok: false, error: `You can add up to ${MAX_ACCOUNTS} accounts.` };
+  if (list.length >= MAX_ACCOUNTS) return { ok: false, error: t('errMaxAccounts', { max: MAX_ACCOUNTS }) };
   let id;
   do { id = crypto.randomBytes(4).toString('hex'); } while (list.some((a) => a.id === id));
-  let n = list.length + 1;
-  while (list.some((a) => a.name === `Account ${n}`)) n += 1;
-  const name = `Account ${n}`;
-  settings.set('accounts', [...list, { id, name }]);
-  addAccountView({ id, name });
+  const name = nextAccountName(list, svc);
+  const entry = { id, name, service: svc, enabled: true };
+  settings.set('accounts', [...list, entry]);
+  mountAccountView(entry);
+  if (stayInSettings && settingsWin && settingsWin.visible) {
+    activeId = id;
+    settings.set('activeAccount', id);
+    applyVisibility();
+    updateTitle();
+    rebuildMenus();
+    pushUi();
+    return { ok: true };
+  }
   switchAccount(id);
   showWindow();
   return { ok: true };
@@ -464,76 +645,122 @@ async function addAccount() {
 
 function renameAccount({ id, name } = {}) {
   const clean = cleanName(name);
-  if (!clean) return { ok: false, error: 'Enter a name.' };
+  if (!clean) return { ok: false, error: t('errEnterName') };
   const list = settings.get('accounts');
-  if (!list.some((a) => a.id === id)) return { ok: false, error: 'Unknown account.' };
+  const current = list.find((a) => a.id === id);
+  if (!current) return { ok: false, error: t('errUnknownAccount') };
+  if (current.name === clean) return { ok: true };
   settings.set('accounts', list.map((a) => (a.id === id ? { ...a, name: clean } : a)));
-  accounts.get(id).name = clean;
+  if (accounts.has(id)) accounts.get(id).name = clean;
   updateTitle();
   rebuildMenus();
+  pushUi();
+  return { ok: true };
+}
+
+async function toggleAccount({ id, enabled } = {}) {
+  if (typeof enabled !== 'boolean') return { ok: false, error: t('errInvalidToggle') };
+  const list = settings.get('accounts');
+  const target = list.find((a) => a.id === id);
+  if (!target) return { ok: false, error: t('errUnknownAccount') };
+  if (target.enabled === enabled) return { ok: true };
+
+  const updated = list.map((a) => (a.id === id ? { ...a, enabled } : a));
+  settings.set('accounts', updated);
+
+  if (enabled) {
+    mountAccountView({ ...target, enabled: true });
+    if (!active()) activeId = id;
+    if (activeId === id && settings.get('activeAccount') !== id) settings.set('activeAccount', id);
+  } else {
+    unmountAccountView(id);
+    if (activeId === id) {
+      const next = updated.find((a) => a.enabled);
+      activeId = next ? next.id : null;
+      if (activeId) settings.set('activeAccount', activeId);
+    }
+  }
+
+  applyVisibility();
+  refreshStatus();
+  onUnread();
+  rebuildMenus();
+  pushUi();
   return { ok: true };
 }
 
 async function removeAccount({ id } = {}) {
-  const acc = accounts.get(id);
   const list = settings.get('accounts');
-  if (!acc) return { ok: false, error: 'Unknown account.' };
-  if (list.length === 1) return { ok: false, error: 'You need at least one account.' };
-  const ok = await confirm(`Remove "${acc.name}"?`, 'This logs the account out and deletes its data in this app. Your Facebook account itself is not affected.', 'Remove');
+  const entry = list.find((a) => a.id === id);
+  if (!entry) return { ok: false, error: t('errUnknownAccount') };
+  if (list.length === 1) return { ok: false, error: t('errKeepOneAccount') };
+  const svcLabel = getService(entry.service).fullName;
+  const ok = await confirm(
+    t('dlgRemoveTitle', { name: entry.name, service: svcLabel }),
+    t('dlgRemoveDetail', { app: APP_NAME, service: svcLabel }),
+    t('remove'),
+  );
   if (!ok) return { ok: false };
   const remaining = list.filter((a) => a.id !== id);
   settings.set('accounts', remaining);
   const chats = settings.get('lastChats');
   delete chats[id];
   settings.set('lastChats', chats);
-  mainWindow.contentView.removeChildView(acc.view);
-  acc.destroy();
-  accounts.delete(id);
-  if (!ephemeral) await clearPartition(acc.partition);
-  if (activeId === id) switchAccount(remaining[0].id); else rebuildMenus();
+  const part = partitionFor(id, ephemeral);
+  unmountAccountView(id);
+  if (!ephemeral) await clearPartition(part);
+  if (activeId === id) {
+    const next = remaining.find((a) => a.enabled);
+    activeId = next ? next.id : null;
+    if (activeId) settings.set('activeAccount', activeId);
+  }
+  applyVisibility();
+  refreshStatus();
   onUnread();
+  rebuildMenus();
+  pushUi();
   return { ok: true };
 }
 
 // ---------------------------------------------------------------- actions
 
-async function logOutActive() {
-  const acc = active();
+async function logOutAccount(id) {
+  const acc = id ? accounts.get(id) : active();
+  if (!acc) return;
+  const svcLabel = getService(acc.service).fullName;
   const ok = await confirm(
-    accounts.size > 1 ? `Log out of "${acc.name}" and delete its data?` : 'Log out and delete all local data?',
-    'This removes the Facebook session, cached messages and settings stored by Facebook in this app. You will need to sign in again.',
-    'Log out and clear',
+    accounts.size > 1 ? t('dlgLogoutTitle', { name: acc.name }) : t('dlgLogoutSingleTitle', { service: svcLabel }),
+    t('dlgLogoutDetail', { service: svcLabel }),
+    t('dlgLogoutBtn'),
   );
   if (!ok) return;
   await clearPartition(acc.partition);
   const chats = settings.get('lastChats');
   delete chats[acc.id];
   settings.set('lastChats', chats);
-  acc.wc.loadURL(HOME_URL);
+  acc.wc.loadURL(homeUrlFor(acc.service));
 }
 
 // "Forgot password" on the lock screen: the only way past the lock without the
 // password is to wipe every account's session and the lock together.
 async function resetEverything() {
   const ok = await confirm(
-    'Log out and reset Thrum?',
-    'This deletes the Facebook sessions and data of all accounts in this app and turns off the app lock. You will need to sign in to Facebook again.',
-    'Log out and reset',
+    t('dlgResetTitle', { app: APP_NAME }),
+    t('dlgResetDetail'),
+    t('dlgResetBtn'),
   );
   if (!ok) return;
-  for (const acc of accounts.values()) await clearPartition(acc.partition);
+  for (const entry of settings.get('accounts')) await clearPartition(partitionFor(entry.id, ephemeral));
   settings.set('lastChats', {});
   lock.disable();
-  for (const acc of accounts.values()) acc.wc.loadURL(HOME_URL);
+  for (const acc of accounts.values()) acc.wc.loadURL(homeUrlFor(acc.service));
 }
 
 async function setEphemeral(on) {
   const ok = await confirm(
-    on ? 'Turn on private mode?' : 'Turn off private mode?',
-    on
-      ? 'Nothing is written to disk: all accounts are logged out whenever you quit. This also logs them out now and deletes the data stored so far. Thrum will restart.'
-      : 'Logins and Facebook cache will be kept between launches again. Thrum will restart.',
-    'Restart',
+    on ? t('dlgPrivateOnTitle') : t('dlgPrivateOffTitle'),
+    on ? t('dlgPrivateOnDetail', { app: APP_NAME }) : t('dlgPrivateOffDetail', { app: APP_NAME }),
+    t('dlgRestart'),
   );
   if (!ok) { rebuildMenus(); return; }
   if (on) {
@@ -552,8 +779,8 @@ function setOpenAtLogin(on) {
   if (isMac && on && app.getLoginItemSettings().status === 'requires-approval') {
     dialog.showMessageBox({
       type: 'info',
-      message: 'Allow Thrum to open at login',
-      detail: 'macOS needs your approval: System Settings → General → Login Items, then turn on Thrum.',
+      message: t('dlgLoginItemTitle', { app: APP_NAME }),
+      detail: t('dlgLoginItemDetail', { app: APP_NAME }),
     });
   }
   rebuildMenus();
@@ -566,15 +793,15 @@ function applyGlobalShortcut() {
     settings.set('globalShortcut', false);
     dialog.showMessageBox({
       type: 'warning',
-      message: `${SHORTCUT_LABEL} is already used by another app`,
-      detail: 'The global shortcut has been turned off.',
+      message: t('dlgShortcutTitle', { shortcut: SHORTCUT_LABEL }),
+      detail: t('dlgShortcutDetail'),
     });
   }
 }
 
 function setFocusSchedule({ enabled, rules } = {}) {
   const clean = normalizeRules(rules);
-  if (!clean) return { ok: false, error: 'Each time range needs at least one day and different start and end times.' };
+  if (!clean) return { ok: false, error: t('focusNeedDiffTime') };
   settings.set('focusRules', clean);
   settings.set('focusEnabled', Boolean(enabled));
   settings.set('focusOverrideUntil', 0);
@@ -583,176 +810,127 @@ function setFocusSchedule({ enabled, rules } = {}) {
 }
 
 function openSettings(section) {
-  if (lock.locked) return;
-  settingsWin.open(mainWindow, section);
+  if (lock.locked || !settingsWin) return;
+  showWindow();
+  settingsWin.open(section);
+}
+
+function toggleSettings(section) {
+  if (lock.locked || !settingsWin) return;
+  if (settingsWin.visible) settingsWin.close();
+  else openSettings(section);
 }
 
 function settingsState() {
   const end = dnd.focusUntil();
+  const timeStr = end ? new Date(end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   return {
-    accounts: settings.get('accounts').map((a) => ({ ...a, active: a.id === activeId, unread: accounts.has(a.id) ? accounts.get(a.id).unread : 0 })),
+    isDev: IS_DEV,
+    appName: APP_NAME,
+    theme: uiThemeState(),
+    update: updater ? updater.getState() : null,
+    accounts: settings.get('accounts').map((a) => ({
+      ...a,
+      active: a.id === activeId,
+      unread: accounts.has(a.id) ? accounts.get(a.id).unread : 0,
+    })),
     maxAccounts: MAX_ACCOUNTS,
     maxRules: MAX_RULES,
     focus: {
       enabled: settings.get('focusEnabled'),
       rules: settings.get('focusRules'),
-      status: dnd.focusPaused() ? `Focus time now, until ${new Date(end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : '',
+      status: dnd.focusPaused() ? t('focusNowUntil', { time: timeStr }) : '',
     },
   };
 }
 
-// ---------------------------------------------------------------- updates
-
-// In-app update: { version, state: 'downloading' | 'ready', prepared }.
-let update = null;
-let updateApplied = false;
-const SELF_UPDATING = new Set(['mac', 'win-zip', 'win-setup', 'appimage']);
-
-function selfUpdateInfo() {
-  return selfUpdate.installInfo({ isPackaged: app.isPackaged });
+function sidebarState() {
+  const all = settings.get('accounts');
+  return {
+    isDev: IS_DEV,
+    appName: APP_NAME,
+    theme: uiThemeState(),
+    settingsOpen: Boolean(settingsWin && settingsWin.visible),
+    totalAccounts: all.length,
+    maxAccounts: MAX_ACCOUNTS,
+    dndPaused: dnd.isPaused(),
+    dndLabel: dnd.label(lang()),
+    lockEnabled: lock.enabled,
+    accounts: all.filter((a) => a.enabled).map((a) => {
+      const live = accounts.get(a.id);
+      return {
+        id: a.id,
+        name: a.name,
+        service: a.service,
+        active: a.id === activeId,
+        unread: live ? live.unread : 0,
+        loading: live ? live.loading : false,
+      };
+    }),
+  };
 }
 
-function showUpdate(release) {
-  if (update && update.version === release.version) {
-    if (update.state === 'ready') askRestartToUpdate();
-    return;
-  }
-  if (SELF_UPDATING.has(selfUpdateInfo().kind)) {
-    dialog.showMessageBox({
-      type: 'info',
-      message: 'Thrum update available',
-      detail: `Version ${release.version} is available (you have ${app.getVersion()}).\n\nThrum downloads it from this project's GitHub releases, checks its SHA-256 checksum, and installs it when it restarts. Your logins and settings are kept.`,
-      buttons: ['Update now', 'Release notes', 'Later'],
-      defaultId: 0,
-      cancelId: 2,
-    }).then(({ response }) => {
-      if (response === 0) installUpdate(release);
-      if (response === 1) openExternal(release.url);
-    });
-    return;
-  }
-  showManualUpdate(release);
+function openAddMenu() {
+  if (!mainWindow || (lock && lock.locked)) return;
+  const atMax = settings.get('accounts').length >= MAX_ACCOUNTS;
+  const menu = Menu.buildFromTemplate(SERVICE_LIST.map((svc) => ({
+    label: t('menuAddService', { service: svc.fullName }),
+    enabled: !atMax,
+    click: () => addAccount({ service: svc.id }),
+  })));
+  menu.popup({ window: mainWindow });
 }
 
-async function installUpdate(release) {
-  if (update) return;
-  const info = selfUpdateInfo();
-  update = { version: release.version, state: 'downloading' };
-  rebuildMenus();
-  let dir = null;
-  try {
-    dir = selfUpdate.workDir(info);
-    const name = info.asset(release.version);
-    const file = path.join(dir, name);
-    await downloadReleaseFile(release.version, name, file, (f) => { if (mainWindow) mainWindow.setProgressBar(f); });
-    update.prepared = selfUpdate.prepare(info, file, dir);
-    update.state = 'ready';
-  } catch (err) {
-    update = null;
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
-    dialog.showMessageBox({
-      type: 'warning',
-      message: 'Could not update Thrum',
-      detail: `${err.message || err}\n\nNothing was changed. You can download the new version from the release page instead.`,
-      buttons: ['Open release page', 'Close'],
-      defaultId: 0,
-      cancelId: 1,
-    }).then(({ response }) => { if (response === 0) openExternal(release.url); });
-    return;
-  } finally {
-    if (mainWindow) mainWindow.setProgressBar(-1);
-    rebuildMenus();
-  }
-  askRestartToUpdate();
+function openAccountMenu(id) {
+  if (!mainWindow || (lock && lock.locked)) return;
+  const list = settings.get('accounts');
+  const entry = list.find((a) => a.id === id);
+  const live = accounts.get(id);
+  if (!entry || !live) return;
+  const svc = getService(entry.service);
+  const menu = Menu.buildFromTemplate([
+    { label: `${entry.name} (${svc.label})`, enabled: false },
+    { type: 'separator' },
+    { label: t('menuReload'), click: () => live.wc.reload() },
+    { label: t('menuGoHome', { service: svc.label }), click: () => live.wc.loadURL(svc.homeUrl) },
+    { type: 'separator' },
+    { label: t('menuTurnOffRam'), click: () => toggleAccount({ id, enabled: false }) },
+    { label: t('menuManageAccounts'), click: () => openSettings('accounts') },
+    { type: 'separator' },
+    { label: t('menuLogoutGeneric'), click: () => logOutAccount(id) },
+    { label: t('menuRemoveAccount'), enabled: list.length > 1, click: () => removeAccount({ id }) },
+  ]);
+  menu.popup({ window: mainWindow });
 }
 
-function askRestartToUpdate() {
-  dialog.showMessageBox({
-    type: 'info',
-    message: `Thrum ${update.version} is ready`,
-    detail: 'Restart now to finish updating. If you choose Later, it installs the next time you quit Thrum.',
-    buttons: ['Restart now', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-  }).then(({ response }) => { if (response === 0) restartToUpdate(); });
-}
-
-// Hands the prepared update to the helper that swaps it in after we exit.
-function applyPendingUpdate(relaunch) {
-  if (!update || update.state !== 'ready' || updateApplied) return;
-  updateApplied = true;
-  try {
-    selfUpdate.apply(update.prepared, { relaunch, relaunchApp: (opts) => app.relaunch(opts) });
-  } catch { /* keep the running version */ }
-}
-
-function restartToUpdate() {
-  applyPendingUpdate(true);
-  isQuitting = true;
-  app.quit();
-}
-
-function updateMenuItem() {
-  if (update && update.state === 'downloading') return { label: `Downloading Thrum ${update.version}…`, enabled: false };
-  if (update && update.state === 'ready') return { label: `Restart to update to ${update.version}`, click: () => restartToUpdate() };
-  if (updater && updater.available) return { label: `Update to ${updater.available.version}…`, click: () => showUpdate(updater.available) };
-  return null;
-}
-
-function showManualUpdate(release) {
-  const cmd = updateCommand();
-  const buttons = cmd ? ['Copy update command', 'Open release page', 'Later'] : ['Open release page', 'Later'];
-  const detail = cmd
-    ? `Version ${release.version} is available (you have ${app.getVersion()}).\n\nTo update, run this in ${isWin ? 'PowerShell' : 'Terminal'}:\n${cmd}`
-    : `Version ${release.version} is available (you have ${app.getVersion()}).`;
-  dialog.showMessageBox({ type: 'info', message: 'Thrum update available', detail, buttons, defaultId: 0, cancelId: buttons.length - 1 })
-    .then(({ response }) => {
-      const action = buttons[response];
-      if (action === 'Copy update command') clipboard.writeText(cmd);
-      if (action === 'Open release page') openExternal(release.url);
-    });
-}
-
-async function checkForUpdatesNow() {
-  if (update && update.state === 'ready') { askRestartToUpdate(); return; }
-  try {
-    const release = await updater.check();
-    if (!release) {
-      dialog.showMessageBox({ type: 'info', message: 'Thrum is up to date', detail: `Version ${app.getVersion()} is the latest.` });
-    } else {
-      showUpdate(release);
-    }
-  } catch (err) {
-    dialog.showMessageBox({ type: 'warning', message: 'Could not check for updates', detail: String(err.message || err) });
-  }
-}
-
-function onUpdateAvailable(release) {
-  rebuildMenus();
-  if (Notification.isSupported()) {
-    const n = new Notification({ title: 'Thrum update available', body: `Version ${release.version} is ready to install.` });
-    n.on('click', () => showUpdate(release));
-    n.show();
-  }
+function openDndMenu() {
+  if (!mainWindow || (lock && lock.locked)) return;
+  Menu.buildFromTemplate(pauseItems()).popup({ window: mainWindow });
 }
 
 // ---------------------------------------------------------------- menus
 
 function pauseItems() {
-  const label = dnd.label();
+  const label = dnd.label(lang());
   return [
-    ...(label ? [{ label, enabled: false }, { label: 'Resume notifications', click: () => dnd.resume() }, { type: 'separator' }] : []),
-    { label: 'Pause for 1 hour', click: () => dnd.pauseFor(HOUR) },
-    { label: 'Pause until tomorrow morning', click: () => dnd.pauseUntilMorning() },
-    { label: 'Pause until I resume', click: () => dnd.pauseIndefinitely() },
+    ...(label ? [{ label, enabled: false }, { label: t('menuResumeNotif'), click: () => dnd.resume() }, { type: 'separator' }] : []),
+    { label: t('menuPause1h'), click: () => dnd.pauseFor(HOUR) },
+    { label: t('menuPauseMorning'), click: () => dnd.pauseUntilMorning() },
+    { label: t('menuPauseIndef'), click: () => dnd.pauseIndefinitely() },
+    { type: 'separator' },
+    settingToggle(t('menuMuteAudio'), 'muteAudioWhenPaused', (on) => {
+      settings.set('muteAudioWhenPaused', on);
+      applyAudioMute();
+      rebuildMenus();
+    }),
     { type: 'separator' },
     {
-      label: 'Use focus schedule',
+      label: t('menuUseFocus'),
       type: 'checkbox',
       checked: settings.get('focusEnabled'),
       click: (item) => { settings.set('focusEnabled', item.checked); settings.set('focusOverrideUntil', 0); dnd.changed(true); },
     },
-    { label: 'Edit focus schedule…', enabled: !lock.locked, click: () => { showWindow(); openSettings('focus'); } },
+    { label: t('menuEditFocus'), enabled: !lock.locked, click: () => { showWindow(); openSettings('focus'); } },
   ];
 }
 
@@ -771,30 +949,39 @@ function settingToggle(label, key, onChange) {
 
 function lockItems() {
   const { locked } = lock;
-  if (!lock.enabled) return [{ label: 'Turn on app lock…', enabled: !locked, click: () => { showWindow(); lock.startSetup(); } }];
+  const openSetup = () => {
+    if (settingsWin) settingsWin.close();
+    showWindow();
+    lock.startSetup();
+  };
+  if (!lock.enabled) return [{ label: t('menuTurnOnLock'), enabled: !locked, click: openSetup }];
   return [
-    { label: 'Lock now', accelerator: 'CmdOrCtrl+Shift+L', enabled: !locked, click: () => lock.lock() },
+    { label: t('menuLockNow'), accelerator: 'CmdOrCtrl+Shift+L', enabled: !locked, click: () => lock.lock() },
     {
-      label: 'Lock after inactivity',
+      label: t('menuLockAfter'),
       enabled: !locked,
       submenu: LOCK_MINUTES.map((m) => ({
-        label: m === 60 ? '1 hour' : `${m} minute${m > 1 ? 's' : ''}`,
+        label: m === 60 ? t('menuOneHour') : t('menuMinutes', { m }),
         type: 'radio',
         checked: settings.get('lockAfterMinutes') === m,
         click: () => settings.set('lockAfterMinutes', m),
       })),
     },
-    { label: 'Change password…', enabled: !locked, click: () => { showWindow(); lock.startSetup(); } },
-    { label: 'Turn off app lock', enabled: !locked, click: () => lock.disable() },
+    { label: t('menuChangePw'), enabled: !locked, click: openSetup },
+    { label: t('menuTurnOffLock'), enabled: !locked, click: () => lock.disable() },
   ];
 }
 
 function accountSwitchItems({ withShortcuts }) {
-  return settings.get('accounts').map((a, i) => {
+  const enabled = enabledAccountConfigs();
+  if (enabled.length === 0) return [{ label: t('menuAllOff'), enabled: false }];
+  return enabled.map((a, i) => {
     const acc = accounts.get(a.id);
-    const unread = acc && acc.unread ? ` (${acc.unread})` : '';
+    const unread = acc && acc.unread > 0 ? ` (${acc.unread})` : (acc && acc.unread === -1 ? ' (•)' : '');
+    const svc = getService(a.service).label;
+    const tag = a.name.toLowerCase().includes(svc.toLowerCase()) ? '' : ` [${svc}]`;
     return {
-      label: `${a.name}${unread}`,
+      label: `${a.name}${tag}${unread}`,
       type: 'radio',
       checked: a.id === activeId,
       enabled: !lock.locked,
@@ -804,23 +991,51 @@ function accountSwitchItems({ withShortcuts }) {
   });
 }
 
+function addServiceItems() {
+  const atMax = settings.get('accounts').length >= MAX_ACCOUNTS;
+  return SERVICE_LIST.map((svc) => ({
+    label: svc.fullName,
+    enabled: !lock.locked && !atMax,
+    click: () => addAccount({ service: svc.id }),
+  }));
+}
+
 function zoom(delta) {
   const acc = active();
   if (!acc) return;
   acc.wc.setZoomLevel(delta === 0 ? 0 : acc.wc.getZoomLevel() + delta);
 }
 
+function updateMenuItem(locked) {
+  if (IS_DEV) return { label: t('menuUpdatesDevOff'), enabled: false };
+  const st = updater ? updater.getState() : null;
+  if (st && st.status === 'ready' && st.availableVersion) {
+    return {
+      label: t('menuInstallUpdate', { version: st.availableVersion }),
+      click: () => updater.installNow(),
+    };
+  }
+  return {
+    label: t('menuCheckUpdates'),
+    enabled: !locked,
+    click: () => {
+      openSettings('appearance');
+      if (updater) updater.check({ silent: false });
+    },
+  };
+}
+
 function buildAppMenu() {
   const { locked } = lock;
+  const cur = active();
   const template = [
     ...(isMac ? [{
       label: app.name,
       submenu: [
         { role: 'about' },
-        { label: 'Check for Updates…', click: () => checkForUpdatesNow() },
-        ...(updateMenuItem() ? [updateMenuItem()] : []),
+        updateMenuItem(locked),
         { type: 'separator' },
-        { label: 'Settings…', accelerator: 'Cmd+,', enabled: !locked, click: () => openSettings() },
+        { label: t('menuSettings'), accelerator: 'Cmd+,', enabled: !locked, click: () => openSettings() },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -829,62 +1044,66 @@ function buildAppMenu() {
         { role: 'quit' },
       ],
     }] : [{
-      label: 'File',
+      label: t('menuFile'),
       submenu: [
-        { label: 'Settings…', accelerator: 'Ctrl+,', enabled: !locked, click: () => openSettings() },
-        { label: 'Check for Updates…', click: () => checkForUpdatesNow() },
-        ...(updateMenuItem() ? [updateMenuItem()] : []),
+        updateMenuItem(locked),
+        { label: t('menuSettings'), accelerator: 'Ctrl+,', enabled: !locked, click: () => openSettings() },
         { type: 'separator' },
         { role: 'quit' },
       ],
     }]),
     { role: 'editMenu' },
     {
-      label: 'View',
+      label: t('menuView'),
       submenu: [
-        { label: 'Messages', accelerator: 'CmdOrCtrl+Shift+M', enabled: !locked, click: () => active() && active().wc.loadURL(HOME_URL) },
-        { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => active() && active().wc.reload() },
+        { label: t('menuHome'), accelerator: 'CmdOrCtrl+Shift+M', enabled: !locked && Boolean(cur), click: () => cur && cur.wc.loadURL(homeUrlFor(cur.service)) },
+        { label: t('menuReload'), accelerator: 'CmdOrCtrl+R', enabled: Boolean(cur), click: () => cur && cur.wc.reload() },
+        {
+          label: t('menuShowSidebar'),
+          type: 'checkbox',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          checked: settings.get('showSidebar'),
+          click: (item) => { settings.set('showSidebar', item.checked); applyVisibility(); rebuildMenus(); },
+        },
         { type: 'separator' },
-        { label: 'Open current page in browser', enabled: !locked, click: () => active() && openExternal(active().wc.getURL()) },
+        { label: t('menuOpenBrowser'), enabled: !locked && Boolean(cur), click: () => cur && openExternal(cur.wc.getURL()) },
         { type: 'separator' },
-        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => zoom(0) },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => zoom(0.5) },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => zoom(-0.5) },
+        { label: t('menuActualSize'), accelerator: 'CmdOrCtrl+0', click: () => zoom(0) },
+        { label: t('menuZoomIn'), accelerator: 'CmdOrCtrl+=', click: () => zoom(0.5) },
+        { label: t('menuZoomOut'), accelerator: 'CmdOrCtrl+-', click: () => zoom(-0.5) },
         { type: 'separator' },
-        { label: 'Toggle Full Screen', accelerator: isMac ? 'Ctrl+Cmd+F' : 'F11', click: () => mainWindow && mainWindow.setFullScreen(!mainWindow.isFullScreen()) },
+        { label: t('menuFullScreen'), accelerator: isMac ? 'Ctrl+Cmd+F' : 'F11', click: () => mainWindow && mainWindow.setFullScreen(!mainWindow.isFullScreen()) },
         // DevTools would expose the page behind the lock screen.
-        { label: 'Toggle Developer Tools', accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I', enabled: !locked, click: () => active() && active().wc.toggleDevTools() },
+        { label: t('menuDevTools'), accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I', enabled: !locked && Boolean(cur), click: () => cur && cur.wc.toggleDevTools() },
       ],
     },
     {
-      label: 'Accounts',
+      label: t('menuAccounts'),
       submenu: [
         ...accountSwitchItems({ withShortcuts: true }),
         { type: 'separator' },
-        { label: 'Add account', enabled: !locked && accounts.size < MAX_ACCOUNTS, click: () => addAccount() },
-        { label: 'Manage accounts…', enabled: !locked, click: () => openSettings('accounts') },
+        { label: t('menuAddAccount'), enabled: !locked && settings.get('accounts').length < MAX_ACCOUNTS, submenu: addServiceItems() },
+        { label: t('menuManageAccounts'), enabled: !locked, click: () => openSettings('accounts') },
         { type: 'separator' },
-        { label: accounts.size > 1 && active() ? `Log out of "${active().name}"…` : 'Log out and clear data…', enabled: !locked, click: () => logOutActive() },
+        { label: cur ? t('menuLogoutAccount', { name: cur.name }) : t('menuLogoutGeneric'), enabled: !locked && Boolean(cur), click: () => logOutAccount() },
       ],
     },
-    { label: 'Notifications', submenu: pauseItems() },
+    { label: t('menuNotifications'), submenu: pauseItems() },
     {
-      label: 'Settings',
+      label: t('menuSettingsTop'),
       submenu: [
-        settingToggle('Keep running in background when closed', 'runInBackground'),
-        ...(process.platform !== 'linux' ? [settingToggle('Open at login', 'openAtLogin', setOpenAtLogin)] : []),
-        settingToggle(`Global shortcut (${SHORTCUT_LABEL}) to show or hide`, 'globalShortcut', (on) => { settings.set('globalShortcut', on); applyGlobalShortcut(); rebuildMenus(); }),
+        settingToggle(t('menuRunInBg'), 'runInBackground'),
+        ...(process.platform !== 'linux' ? [settingToggle(t('menuOpenAtLogin'), 'openAtLogin', setOpenAtLogin)] : []),
+        settingToggle(t('menuGlobalShortcut', { shortcut: SHORTCUT_LABEL }), 'globalShortcut', (on) => { settings.set('globalShortcut', on); applyGlobalShortcut(); rebuildMenus(); }),
         { type: 'separator' },
-        settingToggle('Hide Facebook top bar', 'hideTopBar', (on) => { settings.set('hideTopBar', on); applyCssAll(); rebuildMenus(); }),
-        settingToggle('Reopen last conversation', 'restoreLastChat', (on) => { settings.set('restoreLastChat', on); if (!on) settings.set('lastChats', {}); rebuildMenus(); }),
+        settingToggle(t('menuHideTopBar'), 'hideTopBar', (on) => { settings.set('hideTopBar', on); applyCssAll(); rebuildMenus(); }),
+        settingToggle(t('menuRestoreLastChat'), 'restoreLastChat', (on) => { settings.set('restoreLastChat', on); if (!on) settings.set('lastChats', {}); rebuildMenus(); }),
         { type: 'separator' },
-        settingToggle('Privacy screen: blur when inactive', 'privacyScreen', (on) => { settings.set('privacyScreen', on); applyCssAll(); rebuildMenus(); }),
-        settingToggle('Private mode: keep nothing after quitting', 'ephemeral', (on) => setEphemeral(on)),
-        { label: 'App lock', submenu: lockItems() },
+        settingToggle(t('menuPrivacyScreen'), 'privacyScreen', (on) => { settings.set('privacyScreen', on); applyCssAll(); rebuildMenus(); }),
+        settingToggle(t('menuPrivateMode'), 'ephemeral', (on) => setEphemeral(on)),
+        { label: t('menuAppLock'), submenu: lockItems() },
         { type: 'separator' },
-        settingToggle('Check for updates automatically', 'checkForUpdates', (on) => { settings.set('checkForUpdates', on); if (on) updater.autoCheck(); rebuildMenus(); }),
-        { type: 'separator' },
-        { label: 'More settings…', enabled: !locked, click: () => openSettings() },
+        { label: t('menuMoreSettings'), enabled: !locked, click: () => openSettings('appearance') },
       ],
     },
     { role: 'windowMenu' },
@@ -893,26 +1112,35 @@ function buildAppMenu() {
 }
 
 function trayMenu() {
-  if (!lock || !dnd) return [{ label: 'Open Thrum', click: () => showWindow() }];
+  if (!lock || !dnd) return [{ label: t('open', { app: APP_NAME }), click: () => showWindow() }];
   const total = totalUnread();
+  const enabled = enabledAccountConfigs();
   return [
-    { label: 'Open Thrum', click: () => showWindow() },
-    ...(accounts.size > 1
+    { label: t('open', { app: APP_NAME }), click: () => showWindow() },
+    ...(enabled.length > 1
       ? [{ type: 'separator' }, ...accountSwitchItems({ withShortcuts: false })]
-      : total > 0 ? [{ label: `${total} unread`, enabled: false }] : []),
+      : total > 0 ? [{ label: t('unreadCount', { n: total }), enabled: false }] : []),
     { type: 'separator' },
-    { label: 'Notifications', submenu: pauseItems() },
-    ...(lock.enabled ? [{ label: 'Lock now', enabled: !lock.locked, click: () => lock.lock() }] : []),
-    ...(updateMenuItem() ? [updateMenuItem()] : []),
+    { label: t('menuNotifications'), submenu: pauseItems() },
+    ...(lock.enabled ? [{ label: t('menuLockNow'), enabled: !lock.locked, click: () => lock.lock() }] : []),
     { type: 'separator' },
-    { label: 'Quit Thrum', click: () => { isQuitting = true; app.quit(); } },
+    { label: t('quit', { app: APP_NAME }), click: () => { isQuitting = true; app.quit(); } },
   ];
 }
 
 function rebuildMenus() {
   if (!lock || !dnd) return;
   buildAppMenu();
-  if (tray) tray.setUnread(totalUnread(), { paused: dnd.isPaused() });
+  if (tray) {
+    const total = totalUnread();
+    const anyUnread = hasAnyUnread();
+    const count = total > 0 ? total : (anyUnread ? 1 : 0);
+    tray.setUnread(count, {
+      paused: dnd.isPaused(),
+      unreadText: total > 0 ? t('unreadCount', { n: total }) : t('unreadCount', { n: '•' }),
+      pausedText: t('notificationsPaused'),
+    });
+  }
 }
 
 // ---------------------------------------------------------------- startup
@@ -922,12 +1150,12 @@ function rebuildMenus() {
 // creates (or refreshes) its own.
 function ensureWindowsShortcut() {
   if (!isWin || !app.isPackaged) return;
-  const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Thrum.lnk');
+  const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${APP_NAME}.lnk`);
   shell.writeShortcutLink(lnk, 'create', {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
     appUserModelId: APP_ID,
-    description: 'Thrum',
+    description: APP_NAME,
     icon: process.execPath,
     iconIndex: 0,
   });
@@ -953,11 +1181,11 @@ function createWindow({ show }) {
     width: 1100,
     height: 780,
     ...(settings.get('bounds') || {}),
-    minWidth: 480,
+    minWidth: 520,
     minHeight: 400,
     show,
-    title: 'Thrum',
-    backgroundColor: '#111214',
+    title: `${TITLE_PREFIX}${APP_NAME}`,
+    backgroundColor: surfaceBgHex(),
     autoHideMenuBar: true,
   });
   mainWindow.on('resize', () => { layout(); saveBounds(); });
@@ -972,11 +1200,57 @@ function createWindow({ show }) {
     e.preventDefault();
     mainWindow.hide();
     if (isWin && !settings.get('trayHintShown')) {
-      tray.displayBalloon('Thrum is still running', 'It keeps notifying you about new messages. Quit from the tray icon.');
+      tray.displayBalloon(t('balloonStillRunning', { app: APP_NAME }), t('balloonDetail'));
       settings.set('trayHintShown', true);
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  sidebar = new Sidebar(mainWindow, {
+    getState: sidebarState,
+    handlers: {
+      switchAccount: (id) => switchAccount(id),
+      openAddMenu: () => openAddMenu(),
+      openAccountMenu: (id) => openAccountMenu(id),
+      openDndMenu: () => openDndMenu(),
+      openSettings: () => toggleSettings('accounts'),
+      lockNow: () => lock && lock.lock(),
+    },
+  });
+  sidebar.setBackgroundColor(railBgHex());
+
+  settingsWin = new SettingsWindow(mainWindow, {
+    getState: settingsState,
+    getBgColor: surfaceBgHex,
+    handlers: {
+      addAccount: (p) => addAccount({ ...p, stayInSettings: true }),
+      renameAccount,
+      toggleAccount,
+      removeAccount,
+      setFocus: setFocusSchedule,
+      setAppearance,
+      checkUpdates: () => (updater ? updater.check({ silent: false }) : { ok: false }),
+      installUpdate: () => (updater ? updater.installNow() : { ok: false }),
+      setAutoUpdate: (on) => (updater ? updater.setEnabled(Boolean(on)) : { ok: false }),
+      openReleasePage: () => {
+        if (updater) openExternal(updater.getState().releaseUrl);
+        return { ok: true };
+      },
+    },
+    onOpen: () => {
+      applyVisibility();
+      refreshStatus();
+      if (overlay) overlay.raise();
+      pushUi();
+    },
+    onClose: () => {
+      applyVisibility();
+      refreshStatus();
+      focusActive();
+      pushUi();
+    },
+  });
+  settingsWin.setBackgroundColor(surfaceBgHex());
 
   overlay = new Overlay(mainWindow, {
     unlock: (pw) => lock.tryPassword(pw),
@@ -985,7 +1259,9 @@ function createWindow({ show }) {
     cancel: () => lock.cancelSetup(),
     retry: () => active() && active().recovery.retryNow(),
     reset: () => resetEverything(),
-  }, () => { if (active()) active().wc.focus(); });
+    openSettings: () => openSettings('accounts'),
+  }, () => { if (active()) active().wc.focus(); }, uiThemeState);
+  overlay.setBackgroundColor(surfaceBgHex());
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -1003,33 +1279,64 @@ if (!app.requestSingleInstanceLock()) {
     if (isWin) app.setAppUserModelId(APP_ID);
     settings = new Settings(app.getPath('userData'));
     ephemeral = settings.get('ephemeral');
+    nativeTheme.themeSource = settings.get('appearance');
+    nativeTheme.on('updated', () => applyAppearance());
     ensureWindowsShortcut();
 
-    dnd = new Dnd({ settings, onChange: () => { rebuildMenus(); if (settingsWin) settingsWin.push(); } });
-    updater = new Updater({ settings, onAvailable: onUpdateAvailable });
-    tray = new AppTray({ toggleWindow, buildMenu: trayMenu });
-    settingsWin = new SettingsWindow({
-      getState: settingsState,
-      handlers: { addAccount, renameAccount, removeAccount, setFocus: setFocusSchedule },
+    dnd = new Dnd({
+      settings,
+      onChange: () => {
+        applyAudioMute();
+        rebuildMenus();
+        pushUi();
+      },
     });
+    tray = new AppTray({ appName: APP_NAME, toggleWindow, buildMenu: trayMenu });
+    updater = new Updater({
+      settings,
+      isDev: IS_DEV,
+      currentVersion: app.getVersion(),
+      onChange: () => {
+        rebuildMenus();
+        pushUi();
+      },
+      onQuitForUpdate: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    });
+    updater.start();
 
     createWindow({ show: !startedHidden() });
     lock = new AppLock({
       settings,
       overlay,
+      appName: APP_NAME,
       onChange: () => {
         applyVisibility();
         if (lock.locked && settingsWin) settingsWin.close();
         if (!lock.locked) focusActive();
         rebuildMenus();
+        pushUi();
       },
     });
 
-    activeId = settings.get('activeAccount');
-    for (const a of settings.get('accounts')) addAccountView(a);
-    switchAccount(activeId);
+    const configured = settings.get('accounts');
+    for (const a of configured) {
+      if (a.enabled) mountAccountView(a);
+    }
+    const savedActive = settings.get('activeAccount');
+    activeId = accounts.has(savedActive) ? savedActive : (accounts.keys().next().value || null);
+    if (activeId) switchAccount(activeId);
+    else {
+      applyVisibility();
+      refreshStatus();
+      updateTitle();
+    }
     if (lock.enabled) lock.lock();
+    applyAudioMute();
     rebuildMenus();
+    pushUi();
     applyGlobalShortcut();
 
     app.on('activate', () => showWindow());
@@ -1038,10 +1345,12 @@ if (!app.requestSingleInstanceLock()) {
     if (isMac) app.on('did-become-active', () => { if (mainWindow && !mainWindow.isVisible()) showWindow(); });
   });
 
-  app.on('before-quit', () => { isQuitting = true; });
+  app.on('before-quit', () => {
+    isQuitting = true;
+    if (updater) updater.stop();
+  });
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
-    applyPendingUpdate(false); // "Later": install on the way out
   });
   app.on('window-all-closed', () => app.quit());
 }

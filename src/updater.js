@@ -1,27 +1,34 @@
 'use strict';
 
-// Opt-in update check (off by default). When enabled, asks GitHub once a day
-// for the latest release of this project. These are the only requests the app
-// itself makes: the check goes to API_URL only, and an update (only when you
-// click "Update") downloads this project's release files from GitHub. Both use
-// the default session (no Facebook cookies) and send nothing but a User-Agent
-// with the app version.
+// Production-only update checker & SHA-256 verified downloader for GomTin.
+// Completely disabled in Development builds (isDev === true) so Dev never
+// phones home or overwrites local builds.
+//
+// In Production, requests go strictly to github.com / api.github.com for
+// tuyennq1001/gomtin releases with zero cookies (credentials: 'omit',
+// useSessionCookies: false).
 
 const { app, net } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
+const selfUpdate = require('./self-update');
 
-const API_URL = 'https://api.github.com/repos/thangldw/thrum/releases/latest';
-const RELEASES_URL = 'https://github.com/thangldw/thrum/releases/';
-const DOWNLOAD_BASE = 'https://github.com/thangldw/thrum/releases/download/';
-// github.com answers release downloads with a redirect to its file storage.
-// Every hop must stay on these hosts, over https.
-const DOWNLOAD_HOSTS = new Set(['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']);
+const REPO = 'tuyennq1001/gomtin';
+const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
+const RELEASES_URL = `https://github.com/${REPO}/releases/`;
+const DOWNLOAD_BASE = `https://github.com/${REPO}/releases/download/`;
+const DOWNLOAD_HOSTS = new Set([
+  'github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+]);
 const MAX_REDIRECTS = 5;
 const DAY = 24 * 60 * 60 * 1000;
+const INITIAL_CHECK_DELAY_MS = 10 * 1000;
 
 function parseVersion(v) {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(v);
+  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '').trim());
   return m ? m.slice(1).map(Number) : null;
 }
 
@@ -33,7 +40,6 @@ function isNewer(candidate, current) {
   return false;
 }
 
-// Validate the API response before using any of it.
 function parseRelease(json) {
   if (!json || typeof json !== 'object') return null;
   const { tag_name: tag, html_url: url } = json;
@@ -42,25 +48,11 @@ function parseRelease(json) {
   return { version: tag.replace(/^v/, ''), url };
 }
 
-function updateCommand() {
-  if (process.platform === 'darwin') {
-    const brew = ['/opt/homebrew/Caskroom/thrum', '/usr/local/Caskroom/thrum'].some((p) => fs.existsSync(p));
-    return brew
-      ? 'brew upgrade --cask thangldw/thrum/thrum'
-      : 'curl -fsSL https://raw.githubusercontent.com/thangldw/thrum/main/install.sh | bash';
-  }
-  if (process.platform === 'win32') {
-    return 'irm https://raw.githubusercontent.com/thangldw/thrum/main/install.ps1 | iex';
-  }
-  return null;
-}
-
 function releaseFileUrl(version, name) {
   if (!parseVersion(version) || !/^[A-Za-z0-9._-]+$/.test(name)) throw new Error('Invalid release file');
   return `${DOWNLOAD_BASE}v${version}/${name}`;
 }
 
-// "<sha256>  <file>" lines (sha256sum format), as published with every release.
 function parseSums(text) {
   const sums = {};
   for (const line of String(text).split('\n')) {
@@ -76,14 +68,11 @@ function allowedDownloadUrl(raw) {
   return url.protocol === 'https:' && DOWNLOAD_HOSTS.has(url.hostname);
 }
 
-// Requests one release file. Redirects are followed by hand so that every
-// hop is checked, not just the first. No cookies are sent (useSessionCookies
-// is false). Resolves with the response stream once a 200 arrives.
-function getReleaseFile(url) {
+function getReleaseFile(url, version = '1.0.0') {
   return new Promise((resolve, reject) => {
     if (!allowedDownloadUrl(url)) { reject(new Error('Download left GitHub')); return; }
     const req = net.request({ url, redirect: 'manual', useSessionCookies: false, cache: 'no-store' });
-    req.setHeader('User-Agent', `Thrum/${app.getVersion()}`);
+    req.setHeader('User-Agent', `GomTin/${version}`);
     let hops = 0;
     req.on('redirect', (_status, _method, next) => {
       hops += 1;
@@ -113,72 +102,233 @@ async function readText(res) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-// Downloads one file of a release to dest and checks it against the release's
-// SHA256SUMS.txt (the same check the install scripts make). The file is
-// deleted again if anything fails. onProgress(fraction) is optional.
-async function downloadReleaseFile(version, name, dest, onProgress = () => {}) {
-  const sums = parseSums(await readText(await getReleaseFile(releaseFileUrl(version, 'SHA256SUMS.txt'))));
+async function downloadReleaseFile(version, name, dest, onProgress = () => {}, appVersion = '1.0.0') {
+  const sums = parseSums(await readText(await getReleaseFile(releaseFileUrl(version, 'SHA256SUMS.txt'), appVersion)));
   const expected = sums[name];
-  if (!expected) throw new Error(`${name} is not listed in SHA256SUMS.txt`);
-  const res = await getReleaseFile(releaseFileUrl(version, name));
+  if (!expected) throw new Error(`Checksum missing for ${name}`);
+
+  const res = await getReleaseFile(releaseFileUrl(version, name), appVersion);
   const total = Number(res.headers['content-length']) || 0;
   const hash = crypto.createHash('sha256');
   const out = fs.createWriteStream(dest, { mode: 0o600 });
-  const closed = new Promise((resolve, reject) => { out.on('finish', resolve); out.on('error', reject); });
   let received = 0;
+
   try {
-    for await (const chunk of res) {
-      hash.update(chunk);
-      received += chunk.length;
-      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
-      if (total) onProgress(Math.min(received / total, 1));
-    }
-    out.end();
-    await closed;
-    if (hash.digest('hex') !== expected) throw new Error('Checksum mismatch: the download is corrupt or was tampered with.');
+    await new Promise((resolve, reject) => {
+      out.on('error', reject);
+      res.on('error', reject);
+      res.on('data', (chunk) => {
+        hash.update(chunk);
+        received += chunk.length;
+        if (total > 0) onProgress(Math.min(1, received / total));
+        if (!out.write(chunk)) {
+          res.pause();
+          out.once('drain', () => res.resume());
+        }
+      });
+      res.on('end', () => out.end(resolve));
+    });
+    const actual = hash.digest('hex');
+    if (actual !== expected) throw new Error('Checksum mismatch');
   } catch (err) {
-    out.destroy();
-    fs.rmSync(dest, { force: true });
+    try { out.destroy(); } catch { /* ignore */ }
+    try { fs.rmSync(dest, { force: true }); } catch { /* ignore */ }
     throw err;
   }
-  return dest;
 }
 
 class Updater {
-  constructor({ settings, onAvailable }) {
+  /**
+   * @param {object} opts { settings, isDev, currentVersion, onChange(), onQuitForUpdate() }
+   */
+  constructor({ settings, isDev, currentVersion, onChange = () => {}, onQuitForUpdate = () => {} }) {
     this.settings = settings;
-    this.onAvailable = onAvailable;
-    this.available = null;
-    this.timer = setInterval(() => this.autoCheck(), 60 * 60 * 1000);
-    setTimeout(() => this.autoCheck(), 60 * 1000);
+    this.isDev = Boolean(isDev);
+    this.currentVersion = currentVersion || (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0');
+    this.onChange = onChange;
+    this.onQuitForUpdate = onQuitForUpdate;
+
+    this.status = this.isDev ? 'disabled-dev' : 'idle';
+    this.available = null; // { version, url }
+    this.prepared = null;  // result of selfUpdate.prepare()
+    this.progress = 0;
+    this.error = '';
+    this.busy = false;
+    this.timer = null;
+    this.interval = null;
   }
 
-  async autoCheck() {
-    if (!this.settings.get('checkForUpdates')) return;
-    if (Date.now() - this.settings.get('lastUpdateCheck') < DAY) return;
-    await this.check().catch(() => null);
+  installTarget() {
+    if (this.isDev) return { kind: 'manual', reason: 'dev-build' };
+    return selfUpdate.installInfo({ isPackaged: Boolean(app && app.isPackaged) });
   }
 
-  // Returns { version, url } if a newer release exists, null otherwise.
-  // Throws on network/HTTP errors (shown to the user for manual checks).
-  async check() {
-    const res = await net.fetch(API_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': `Thrum/${app.getVersion()}` },
-      credentials: 'omit',
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`GitHub returned HTTP ${res.status}`);
-    this.settings.set('lastUpdateCheck', Date.now());
-    const release = parseRelease(await res.json());
-    if (!release) throw new Error('Unexpected response from GitHub');
-    const wasKnown = this.available && this.available.version === release.version;
-    this.available = isNewer(release.version, app.getVersion()) ? release : null;
-    if (this.available && !wasKnown) this.onAvailable(this.available);
-    return this.available;
+  getState() {
+    const info = this.installTarget();
+    return {
+      disabledDev: this.isDev,
+      enabled: !this.isDev && Boolean(this.settings.get('autoCheckUpdates')),
+      currentVersion: this.currentVersion,
+      status: this.isDev ? 'disabled-dev' : this.status,
+      availableVersion: this.available ? this.available.version : null,
+      releaseUrl: this.available ? this.available.url : RELEASES_URL,
+      progress: this.progress,
+      error: this.error,
+      lastChecked: this.settings.get('lastUpdateCheck'),
+      canSelfUpdate: !this.isDev && info.kind !== 'manual' && info.kind !== 'brew',
+    };
+  }
+
+  emit() {
+    this.onChange(this.getState());
+  }
+
+  start() {
+    if (this.isDev) return;
+    this.stop();
+    if (!this.settings.get('autoCheckUpdates')) return;
+
+    const elapsed = Date.now() - this.settings.get('lastUpdateCheck');
+    const delay = elapsed >= DAY ? INITIAL_CHECK_DELAY_MS : Math.max(INITIAL_CHECK_DELAY_MS, DAY - elapsed);
+    this.timer = setTimeout(() => {
+      this.check({ silent: true }).catch(() => {});
+      this.interval = setInterval(() => {
+        if (this.settings.get('autoCheckUpdates')) this.check({ silent: true }).catch(() => {});
+      }, DAY);
+      if (this.interval.unref) this.interval.unref();
+    }, delay);
+    if (this.timer.unref) this.timer.unref();
+  }
+
+  stop() {
+    clearTimeout(this.timer);
+    clearInterval(this.interval);
+    this.timer = null;
+    this.interval = null;
+  }
+
+  setEnabled(on) {
+    if (this.isDev) return { ok: false, reason: 'dev' };
+    this.settings.set('autoCheckUpdates', Boolean(on));
+    if (on) this.start(); else this.stop();
+    this.emit();
+    return { ok: true };
+  }
+
+  cleanupPrepared() {
+    if (this.prepared && this.prepared.dir) {
+      try { fs.rmSync(this.prepared.dir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    this.prepared = null;
+  }
+
+  async check({ silent = false } = {}) {
+    if (this.isDev) return { ok: false, reason: 'dev' };
+    if (this.busy) return { ok: true, state: this.getState() };
+    if (this.status === 'ready' && this.prepared) return { ok: true, state: this.getState() };
+
+    this.busy = true;
+    this.error = '';
+    this.status = 'checking';
+    this.emit();
+
+    try {
+      const res = await net.fetch(API_URL, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': `GomTin/${this.currentVersion}`,
+        },
+        credentials: 'omit',
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
+      this.settings.set('lastUpdateCheck', Date.now());
+      const release = parseRelease(await res.json());
+      if (!release) throw new Error('Invalid release metadata');
+
+      if (!isNewer(release.version, this.currentVersion)) {
+        this.available = null;
+        this.status = 'up-to-date';
+        this.busy = false;
+        this.emit();
+        return { ok: true, state: this.getState() };
+      }
+
+      this.available = release;
+      const info = this.installTarget();
+      if (info.kind === 'manual' || info.kind === 'brew') {
+        this.status = 'available-manual';
+        this.busy = false;
+        this.emit();
+        return { ok: true, state: this.getState() };
+      }
+
+      // Download & verify SHA-256 + codesign silently in the background.
+      this.status = 'downloading';
+      this.progress = 0;
+      this.emit();
+
+      const dir = selfUpdate.workDir(info);
+      const assetName = info.asset(release.version);
+      const dest = path.join(dir, assetName);
+      try {
+        let lastPct = -1;
+        await downloadReleaseFile(release.version, assetName, dest, (frac) => {
+          const pct = Math.round(frac * 100);
+          if (pct !== lastPct) {
+            lastPct = pct;
+            this.progress = pct;
+            this.emit();
+          }
+        }, this.currentVersion);
+        this.cleanupPrepared();
+        this.prepared = selfUpdate.prepare(info, dest, dir);
+        this.progress = 100;
+        this.status = 'ready';
+      } catch (err) {
+        try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+        throw err;
+      }
+
+      this.busy = false;
+      this.emit();
+      return { ok: true, state: this.getState() };
+    } catch (err) {
+      this.busy = false;
+      if (silent) {
+        this.status = this.available ? 'available-manual' : 'idle';
+        this.error = '';
+      } else {
+        this.status = 'error';
+        this.error = err && err.message ? err.message : 'Update check failed';
+      }
+      this.emit();
+      return { ok: false, error: this.error };
+    }
+  }
+
+  installNow() {
+    if (this.isDev || !this.prepared) return { ok: false };
+    const prepared = this.prepared;
+    this.prepared = null;
+    selfUpdate.apply(prepared, { relaunch: true, relaunchApp: (opts) => app.relaunch(opts) });
+    this.onQuitForUpdate();
+    return { ok: true };
   }
 }
 
 module.exports = {
-  Updater, isNewer, parseRelease, updateCommand, API_URL, RELEASES_URL,
-  downloadReleaseFile, releaseFileUrl, parseSums, allowedDownloadUrl, DOWNLOAD_HOSTS,
+  Updater,
+  REPO,
+  API_URL,
+  RELEASES_URL,
+  DOWNLOAD_BASE,
+  DOWNLOAD_HOSTS,
+  parseVersion,
+  isNewer,
+  parseRelease,
+  releaseFileUrl,
+  parseSums,
+  allowedDownloadUrl,
+  downloadReleaseFile,
 };

@@ -1,53 +1,269 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi" data-theme="blue" data-mode="dark">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Thrum Settings</title>
-  <link rel="stylesheet" href="overlay.css">
+  <title>Cài đặt GomTin</title>
+  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="settings.css">
 </head>
 <body class="settings">
-  <main>
-    <section id="accounts" aria-labelledby="accounts-title">
-      <h1 id="accounts-title">Accounts</h1>
-      <p class="muted">Each account has its own login, kept separate from the others. Switch with the Accounts menu, the tray icon, or <kbd id="switch-key">⌘1</kbd>…<kbd>9</kbd>.</p>
-      <ul id="account-list" class="list"></ul>
-      <button id="add-account" type="button" class="secondary">Add account</button>
-      <p class="error" id="accounts-error" role="alert"></p>
+  <main class="shell">
+    <!-- Buzzy-style Header: Back Button + Mascot + Brand + DEV Pill + Pill Tabs -->
+    <header class="app-header">
+      <div class="header-top">
+        <button id="back-btn" type="button" class="back-btn" title="Đóng Cài đặt (Esc)" aria-label="Quay lại">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          <span id="back-label">Quay lại</span>
+        </button>
+
+        <div class="brand-row">
+          <img src="../assets/mascot.svg" class="header-mascot" width="32" height="32" alt="">
+          <span id="brand-name" class="brand-name">GomTin</span>
+          <span id="header-dev" class="dev-pill" hidden>DEV</span>
+        </div>
+
+        <span class="header-spacer" aria-hidden="true"></span>
+      </div>
+
+      <nav class="pill-tabs" role="tablist" aria-label="Cài đặt">
+        <button id="tab-btn-accounts" type="button" class="pill-tab" role="tab" data-tab="accounts" aria-selected="true" aria-controls="panel-accounts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          <span id="tab-label-accounts">Tài khoản</span>
+        </button>
+        <button id="tab-btn-focus" type="button" class="pill-tab" role="tab" data-tab="focus" aria-selected="false" aria-controls="panel-focus">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="tab-label-focus">Tập trung</span>
+        </button>
+        <button id="tab-btn-appearance" type="button" class="pill-tab" role="tab" data-tab="appearance" aria-selected="false" aria-controls="panel-appearance">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9z"/></svg>
+          <span id="tab-label-appearance">Giao diện</span>
+        </button>
+      </nav>
+    </header>
+
+    <div id="dev-banner" class="dev-banner" hidden>
+      <strong id="dev-banner-title">BẢN PHÁT TRIỂN (DEV)</strong> —
+      <span id="dev-banner-body">Dữ liệu người dùng được tách biệt hoàn toàn, không ảnh hưởng bản chính thức.</span>
+    </div>
+
+    <!-- TAB 1: ACCOUNTS -->
+    <section id="panel-accounts" class="tab-panel" role="tabpanel" data-panel="accounts" aria-labelledby="tab-btn-accounts">
+      <div class="gt-card">
+        <div class="card-head">
+          <div class="card-title-group">
+            <span class="card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <h1 id="accounts-title">Tài khoản nhắn tin</h1>
+          </div>
+          <span id="account-count" class="count-pill"></span>
+        </div>
+
+        <p id="accounts-sub" class="card-desc"></p>
+
+        <ul id="account-list" class="list">
+          <li id="accounts-loading" class="loading-row" aria-hidden="true">Đang tải danh sách tài khoản…</li>
+        </ul>
+
+        <div class="add-block">
+          <span id="accounts-add-label" class="mini-label">Thêm kênh trò chuyện</span>
+          <div class="add-row" role="group" aria-label="Thêm tài khoản theo dịch vụ">
+            <button id="add-messenger" type="button" class="add-service" data-service="messenger">
+              <svg class="mini-svc" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#0084FF"/><path d="M16 7.5c-4.97 0-9 3.74-9 8.35 0 2.63 1.31 4.97 3.36 6.51v3.14l3.08-1.69c.82.23 1.68.35 2.56.35 4.97 0 9-3.74 9-8.35S20.97 7.5 16 7.5zm.9 11.24l-2.3-2.45-4.48 2.45 4.93-5.23 2.35 2.45 4.43-2.45-4.93 5.23z" fill="#fff"/></svg>
+              <span>+ Messenger</span>
+            </button>
+            <button id="add-zalo" type="button" class="add-service" data-service="zalo">
+              <img class="mini-svc" src="../assets/zalo.svg" alt="">
+              <span>+ Zalo</span>
+            </button>
+            <button id="add-telegram" type="button" class="add-service" data-service="telegram">
+              <svg class="mini-svc" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#2AABEE"/><path d="M22.9 10.2l-2.55 12.05c-.19.86-.7 1.07-1.41.66l-3.9-2.88-1.88 1.81c-.21.21-.38.38-.78.38l.28-3.98 7.24-6.54c.31-.28-.07-.44-.49-.16l-8.95 5.63-3.86-1.21c-.84-.26-.85-.84.18-1.24l15.08-5.81c.7-.26 1.31.16 1.04 1.29z" fill="#fff"/></svg>
+              <span>+ Telegram</span>
+            </button>
+          </div>
+        </div>
+
+        <p class="status-msg" id="accounts-error" role="status"></p>
+      </div>
     </section>
 
-    <section id="focus" aria-labelledby="focus-title">
-      <h1 id="focus-title">Focus schedule</h1>
-      <p class="muted">Pause notifications automatically at set times. Unread counts keep updating. During a focus period, <em>Resume notifications</em> turns them back on until it ends.</p>
-      <label class="switch"><input id="focus-enabled" type="checkbox"> Pause notifications on a schedule</label>
-      <ul id="rule-list" class="list"></ul>
-      <div class="row">
-        <button id="add-rule" type="button" class="secondary">Add time range</button>
-        <button id="save-focus" type="button" class="primary">Save schedule</button>
+    <!-- TAB 2: FOCUS SCHEDULE -->
+    <section id="panel-focus" class="tab-panel" role="tabpanel" data-panel="focus" aria-labelledby="tab-btn-focus" hidden>
+      <div class="gt-card">
+        <div class="card-head">
+          <div class="card-title-group">
+            <span class="card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </span>
+            <h1 id="focus-title">Lịch tập trung</h1>
+          </div>
+        </div>
+
+        <p id="focus-sub" class="card-desc"></p>
+
+        <div class="setting-row">
+          <div class="setting-copy">
+            <span id="focus-enable-label" class="setting-title">Bật lịch tập trung tự động</span>
+            <span id="focus-enable-sub" class="setting-sub">Tự động im lặng trong các khung giờ bên dưới</span>
+          </div>
+          <label class="toggle-wrap">
+            <input id="focus-enabled" type="checkbox" class="toggle">
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+        </div>
+
+        <ul id="rule-list" class="list rules-list"></ul>
+
+        <div class="focus-actions">
+          <button id="add-rule" type="button" class="btn secondary">Thêm khung giờ</button>
+          <button id="save-focus" type="button" class="btn primary">Lưu lịch tập trung</button>
+        </div>
+        <p class="hint" id="focus-status" role="status"></p>
       </div>
-      <p class="hint" id="focus-status" role="status"></p>
+    </section>
+
+    <!-- TAB 3: APPEARANCE (6 Buzzy Pastel Themes + Light/Dark/System + Vi/En) -->
+    <section id="panel-appearance" class="tab-panel" role="tabpanel" data-panel="appearance" aria-labelledby="tab-btn-appearance" hidden>
+      <div class="gt-card">
+        <div class="card-head">
+          <div class="card-title-group">
+            <span class="card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9z"/></svg>
+            </span>
+            <h1 id="theme-card-title">Bảng màu Pastel</h1>
+          </div>
+        </div>
+        <p id="theme-card-sub" class="card-desc"></p>
+
+        <div id="theme-grid" class="theme-grid" role="radiogroup" aria-label="Pastel theme">
+          <button type="button" class="theme-chip" data-color="blue" role="radio" aria-checked="true">
+            <span class="swatch swatch-blue" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="blue">Xanh Bầu Trời</span>
+          </button>
+          <button type="button" class="theme-chip" data-color="green" role="radio" aria-checked="false">
+            <span class="swatch swatch-green" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="green">Xanh Bạc Hà</span>
+          </button>
+          <button type="button" class="theme-chip" data-color="pink" role="radio" aria-checked="false">
+            <span class="swatch swatch-pink" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="pink">Hồng Dâu Tây</span>
+          </button>
+          <button type="button" class="theme-chip" data-color="orange" role="radio" aria-checked="false">
+            <span class="swatch swatch-orange" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="orange">Cam Đào</span>
+          </button>
+          <button type="button" class="theme-chip" data-color="purple" role="radio" aria-checked="false">
+            <span class="swatch swatch-purple" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="purple">Tím Lavender</span>
+          </button>
+          <button type="button" class="theme-chip" data-color="red" role="radio" aria-checked="false">
+            <span class="swatch swatch-red" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7"/></svg></span>
+            <span class="theme-label" data-color-label="red">Đỏ Cà Chua</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="gt-card">
+        <div class="setting-row">
+          <div class="setting-copy">
+            <span id="mode-card-title" class="setting-title">Chế độ hiển thị</span>
+            <span id="mode-card-sub" class="setting-sub">Đồng bộ theo macOS hoặc chọn cố định Sáng / Tối</span>
+          </div>
+          <div class="seg-group" role="radiogroup" aria-label="Chế độ hiển thị">
+            <button type="button" class="seg-btn" data-appearance="system" role="radio" aria-checked="true" id="mode-system">Theo hệ thống</button>
+            <button type="button" class="seg-btn" data-appearance="light" role="radio" aria-checked="false" id="mode-light">Sáng</button>
+            <button type="button" class="seg-btn" data-appearance="dark" role="radio" aria-checked="false" id="mode-dark">Tối</button>
+          </div>
+        </div>
+
+        <div class="setting-row no-divider">
+          <div class="setting-copy">
+            <span id="lang-card-title" class="setting-title">Ngôn ngữ</span>
+            <span id="lang-card-sub" class="setting-sub">Áp dụng cho thanh bên, cài đặt, menu và hộp thoại</span>
+          </div>
+          <div class="seg-group" role="radiogroup" aria-label="Ngôn ngữ">
+            <button type="button" class="seg-btn" data-lang="vi" role="radio" aria-checked="true">Tiếng Việt</button>
+            <button type="button" class="seg-btn" data-lang="en" role="radio" aria-checked="false">English</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Production Update Card (Hard-disabled on Dev builds) -->
+      <div class="gt-card" id="update-card">
+        <div class="card-head">
+          <div class="card-title-group">
+            <span class="card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+            <h1 id="update-card-title">Cập nhật ứng dụng</h1>
+          </div>
+          <span id="update-version-pill" class="count-pill">v1.0.0</span>
+        </div>
+
+        <p id="update-dev-note" class="dev-banner compact" hidden></p>
+
+        <div id="update-prod-body">
+          <div class="setting-row">
+            <div class="setting-copy">
+              <span id="update-auto-title" class="setting-title">Tự động kiểm tra &amp; tải cập nhật</span>
+              <span id="update-auto-sub" class="setting-sub">Kiểm tra định kỳ từ GitHub Releases và xác thực SHA-256</span>
+            </div>
+            <label class="toggle-wrap">
+              <input id="auto-update-toggle" type="checkbox" class="toggle">
+              <span class="toggle-track" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <progress id="update-progress" class="progress-bar" max="100" value="0" hidden></progress>
+
+          <div class="update-footer">
+            <p id="update-status" class="status-msg" role="status"></p>
+            <button id="update-action-btn" type="button" class="btn secondary">Kiểm tra cập nhật</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
+
+  <!-- Service mini icon templates -->
+  <template id="tpl-icon-messenger">
+    <svg class="row-svc-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#0084FF"/><path d="M16 7.5c-4.97 0-9 3.74-9 8.35 0 2.63 1.31 4.97 3.36 6.51v3.14l3.08-1.69c.82.23 1.68.35 2.56.35 4.97 0 9-3.74 9-8.35S20.97 7.5 16 7.5zm.9 11.24l-2.3-2.45-4.48 2.45 4.93-5.23 2.35 2.45 4.43-2.45-4.93 5.23z" fill="#fff"/></svg>
+  </template>
+  <template id="tpl-icon-zalo">
+    <img class="row-svc-icon" src="../assets/zalo.svg" alt="">
+  </template>
+  <template id="tpl-icon-telegram">
+    <svg class="row-svc-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#2AABEE"/><path d="M22.9 10.2l-2.55 12.05c-.19.86-.7 1.07-1.41.66l-3.9-2.88-1.88 1.81c-.21.21-.38.38-.78.38l.28-3.98 7.24-6.54c.31-.28-.07-.44-.49-.16l-8.95 5.63-3.86-1.21c-.84-.26-.85-.84.18-1.24l15.08-5.81c.7-.26 1.31.16 1.04 1.29z" fill="#fff"/></svg>
+  </template>
+
   <template id="account-row">
     <li class="account">
-      <input class="name" type="text" maxlength="40" aria-label="Account name">
+      <label class="toggle-wrap">
+        <input type="checkbox" class="toggle">
+        <span class="toggle-track" aria-hidden="true"></span>
+      </label>
+      <span class="row-icon-slot" aria-hidden="true"></span>
+      <input class="name" type="text" maxlength="40" aria-label="Account name" placeholder="Account name">
+      <span class="state-chip"></span>
       <span class="badge" hidden></span>
-      <button type="button" class="small rename">Rename</button>
-      <button type="button" class="small danger remove">Remove</button>
+      <button type="button" class="btn-ghost danger remove">Xóa</button>
     </li>
   </template>
+
   <template id="rule-row">
     <li class="rule">
       <div class="days" role="group" aria-label="Days"></div>
       <div class="times">
-        <label>From <input class="start" type="time" required></label>
-        <label>to <input class="end" type="time" required></label>
-        <button type="button" class="small danger remove-rule" aria-label="Remove time range">✕</button>
+        <label><span class="lbl-from">Từ</span> <input class="start" type="time" required></label>
+        <label><span class="lbl-to">đến</span> <input class="end" type="time" required></label>
+        <button type="button" class="btn-ghost danger remove-rule" aria-label="Remove">✕</button>
       </div>
     </li>
   </template>
+
+  <script src="i18n.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

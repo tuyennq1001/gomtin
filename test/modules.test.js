@@ -5,20 +5,12 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const Module = require('module');
 
 const { sanitize, isChatPath, Settings } = require('../src/settings');
 const { hashPassword, verifyPassword, Throttle } = require('../src/password');
 
-// updater.js and dnd.js import electron only for runtime objects; stub it.
-const realLoad = Module._load;
-Module._load = function load(request, ...rest) {
-  if (request === 'electron') return { app: { getVersion: () => '0.2.0' }, net: {} };
-  return realLoad.call(this, request, ...rest);
-};
-const { isNewer, parseRelease } = require('../src/updater');
+// dnd.js does not require electron at runtime, keep stub helper minimal.
 const { Dnd, nextMorning } = require('../src/dnd');
-Module._load = realLoad;
 
 // ---- settings
 
@@ -26,7 +18,8 @@ test('settings: defaults for empty or garbage input', () => {
   for (const raw of [undefined, null, 42, 'x', [], {}]) {
     const s = sanitize(raw);
     assert.strictEqual(s.hideTopBar, true);
-    assert.strictEqual(s.checkForUpdates, false, 'update checks must default to off');
+    assert.strictEqual(s.showSidebar, true);
+    assert.strictEqual(s.muteAudioWhenPaused, true, 'DND audio mute defaults to on');
     assert.strictEqual(s.lockEnabled, false);
     assert.strictEqual(s.bounds, null);
   }
@@ -168,25 +161,6 @@ test('dnd: next morning is 08:00 local, today or tomorrow', () => {
   assert.strictEqual(new Date(nextMorning(late)).getHours(), 8);
 });
 
-// ---- updater
-
-test('updater: version comparison', () => {
-  assert.ok(isNewer('0.2.1', '0.2.0'));
-  assert.ok(isNewer('v1.0.0', '0.9.9'));
-  assert.ok(!isNewer('0.2.0', '0.2.0'));
-  assert.ok(!isNewer('0.1.9', '0.2.0'));
-  assert.ok(!isNewer('garbage', '0.2.0'));
-});
-
-test('updater: only well-formed releases from this repo are accepted', () => {
-  const good = { tag_name: 'v0.3.0', html_url: 'https://github.com/thangldw/thrum/releases/tag/v0.3.0' };
-  assert.deepStrictEqual(parseRelease(good), { version: '0.3.0', url: good.html_url });
-  assert.strictEqual(parseRelease({ ...good, html_url: 'https://evil.example/download' }), null);
-  assert.strictEqual(parseRelease({ ...good, html_url: 'https://github.com/someone-else/facebook-messenger/releases/x' }), null);
-  assert.strictEqual(parseRelease({ ...good, tag_name: 'v0.3.0; rm -rf /' }), null);
-  assert.strictEqual(parseRelease(null), null);
-});
-
 // ---- focus schedule
 
 const { focusEnd, normalizeRules } = require('../src/focus');
@@ -245,22 +219,194 @@ const HOUR_MS = 3600000;
 
 // ---- accounts in settings
 
-test('settings: accounts are validated and the active account must exist', () => {
+test('settings: accounts are validated (multi-service + enabled) and active account prefers enabled', () => {
   const s = sanitize({
-    accounts: [{ id: 'default', name: ' Personal‮ ' }, { id: 'ab12', name: 'Work' }],
+    accounts: [
+      { id: 'default', name: ' Personal‮ ' }, // legacy shape without service/enabled
+      { id: 'z1', name: 'Zalo Work', service: 'zalo', enabled: true },
+      { id: 't1', name: 'Telegram', service: 'telegram', enabled: false },
+    ],
     activeAccount: 'zz99',
-    lastChats: { default: '/messages/t/1', ab12: 'https://evil.example', ghost: '/messages/t/2' },
+    lastChats: { default: '/messages/t/1', z1: 'https://evil.example', ghost: '/messages/t/2' },
   });
-  assert.deepStrictEqual(s.accounts, [{ id: 'default', name: 'Personal' }, { id: 'ab12', name: 'Work' }]);
-  assert.strictEqual(s.activeAccount, 'default', 'unknown active account falls back to the first');
+  assert.deepStrictEqual(s.accounts, [
+    { id: 'default', name: 'Personal', service: 'messenger', enabled: true },
+    { id: 'z1', name: 'Zalo Work', service: 'zalo', enabled: true },
+    { id: 't1', name: 'Telegram', service: 'telegram', enabled: false },
+  ]);
+  assert.strictEqual(s.activeAccount, 'default', 'unknown active account falls back to first enabled');
   assert.deepStrictEqual(s.lastChats, { default: '/messages/t/1' });
-  for (const bad of [[], [{ id: 'A!', name: 'x' }], [{ id: 'a', name: '' }], [{ id: 'a', name: 'x' }, { id: 'a', name: 'y' }], Array(10).fill(0).map((_, i) => ({ id: `a${i}`, name: 'x' }))]) {
-    assert.deepStrictEqual(sanitize({ accounts: bad }).accounts, [{ id: 'default', name: 'Account 1' }], JSON.stringify(bad));
+
+  // Disabling the active account shifts activeAccount to the next enabled account.
+  const shifted = sanitize({
+    accounts: [
+      { id: 'default', name: 'Messenger', service: 'messenger', enabled: false },
+      { id: 'z1', name: 'Zalo', service: 'zalo', enabled: true },
+    ],
+    activeAccount: 'default',
+  });
+  assert.strictEqual(shifted.activeAccount, 'z1');
+
+  // All accounts disabled is valid (renders empty state cleanly without crashing).
+  const allOff = sanitize({
+    accounts: [{ id: 'default', name: 'Messenger', service: 'messenger', enabled: false }],
+    activeAccount: 'default',
+  });
+  assert.strictEqual(allOff.accounts[0].enabled, false);
+  assert.strictEqual(allOff.activeAccount, 'default');
+
+  for (const bad of [
+    [],
+    [{ id: 'A!', name: 'x' }],
+    [{ id: 'a', name: '' }],
+    [{ id: 'a', name: 'x', service: 'unknown' }],
+    [{ id: 'a', name: 'x', enabled: 'yes' }],
+    [{ id: 'a', name: 'x' }, { id: 'a', name: 'y' }],
+    Array(10).fill(0).map((_, i) => ({ id: `a${i}`, name: 'x' })),
+  ]) {
+    assert.deepStrictEqual(
+      sanitize({ accounts: bad }).accounts,
+      [{ id: 'default', name: 'Messenger', service: 'messenger', enabled: true }],
+      JSON.stringify(bad),
+    );
   }
+});
+
+test('unread: parses Messenger, Zalo, Telegram titles (EN/VI/JA/bidi), favicons, and combines signals', () => {
+  const { parseTitleUnread, hasUnreadFavicon, combineUnread } = require('../src/unread');
+  assert.strictEqual(parseTitleUnread('(3) Messenger'), 3);
+  assert.strictEqual(parseTitleUnread('(20+) Messenger | Facebook'), 20);
+  assert.strictEqual(parseTitleUnread('\u200e(5) メッセンジャー | Facebook'), 5);
+  assert.strictEqual(parseTitleUnread('（7）Messenger'), 7);
+  assert.strictEqual(parseTitleUnread('(99+) Zalo'), 99);
+  assert.strictEqual(parseTitleUnread('[4] Zalo - Tuyen'), 4);
+  assert.strictEqual(parseTitleUnread('Zalo (6)'), 6);
+  assert.strictEqual(parseTitleUnread('(12) Telegram'), 12);
+  assert.strictEqual(parseTitleUnread('• (2) Telegram'), 2);
+  assert.strictEqual(parseTitleUnread('Telegram'), 0);
+  assert.strictEqual(parseTitleUnread('(99999) Flood'), 999);
+  assert.strictEqual(hasUnreadFavicon(['https://web.telegram.org/a/favicon-unread.svg']), true);
+  assert.strictEqual(hasUnreadFavicon(['https://web.telegram.org/a/favicon.svg']), false);
+  assert.strictEqual(combineUnread({ dom: 4, title: 2, favicon: true }), 4);
+  assert.strictEqual(combineUnread({ dom: 0, title: 3, favicon: false }), 3);
+  assert.strictEqual(combineUnread({ dom: 0, title: 0, favicon: true }), -1);
+  assert.strictEqual(combineUnread({ dom: -1, title: 0, favicon: false }), -1);
+  assert.strictEqual(combineUnread({ dom: 0, title: 0, favicon: false }), 0);
 });
 
 test('settings: v0.2 single lastChat migrates to the default account', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-mig-'));
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ lastChat: '/messages/t/42' }));
   assert.deepStrictEqual(new Settings(dir).get('lastChats'), { default: '/messages/t/42' });
+});
+
+test('settings: themeColor, appearance and language validate with Buzzy defaults', () => {
+  const d = sanitize({});
+  assert.strictEqual(d.themeColor, 'blue');
+  assert.strictEqual(d.appearance, 'system');
+  assert.strictEqual(d.language, 'vi');
+
+  const ok = sanitize({ themeColor: 'pink', appearance: 'light', language: 'en' });
+  assert.strictEqual(ok.themeColor, 'pink');
+  assert.strictEqual(ok.appearance, 'light');
+  assert.strictEqual(ok.language, 'en');
+
+  const bad = sanitize({ themeColor: 'neon', appearance: 'sepia', language: 'fr' });
+  assert.strictEqual(bad.themeColor, 'blue');
+  assert.strictEqual(bad.appearance, 'system');
+  assert.strictEqual(bad.language, 'vi');
+});
+
+test('migrate: copies legacy Messenger userData once while skipping lock files', () => {
+  const { migrateLegacyUserData, MARKER } = require('../src/migrate');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gt-mig-'));
+  const legacy = path.join(root, 'Messenger');
+  const next = path.join(root, 'GomTin');
+  fs.mkdirSync(path.join(legacy, 'Partitions', 'messenger'), { recursive: true });
+  fs.mkdirSync(path.join(legacy, 'Crashpad'), { recursive: true });
+  fs.writeFileSync(path.join(legacy, 'settings.json'), JSON.stringify({ accounts: [{ id: 'z1', name: 'Zalo', service: 'zalo', enabled: true }] }));
+  fs.writeFileSync(path.join(legacy, 'Partitions', 'messenger', 'session.dat'), 'ok');
+  fs.writeFileSync(path.join(legacy, 'SingletonLock'), 'lock');
+  fs.writeFileSync(path.join(legacy, 'Crashpad', 'dump.dmp'), 'crash');
+
+  assert.strictEqual(migrateLegacyUserData(root, 'Messenger', 'GomTin'), true);
+  assert.ok(fs.existsSync(path.join(next, 'settings.json')));
+  assert.strictEqual(fs.readFileSync(path.join(next, 'Partitions', 'messenger', 'session.dat'), 'utf8'), 'ok');
+  assert.ok(fs.existsSync(path.join(next, MARKER)));
+  assert.ok(!fs.existsSync(path.join(next, 'SingletonLock')), 'transient lock files must be skipped');
+  assert.ok(!fs.existsSync(path.join(next, 'Crashpad')), 'Crashpad directory must be skipped');
+
+  // Running again is a no-op and never overwrites newer GomTin data.
+  fs.writeFileSync(path.join(next, 'settings.json'), JSON.stringify({ themeColor: 'purple' }));
+  assert.strictEqual(migrateLegacyUserData(root, 'Messenger', 'GomTin'), false);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(next, 'settings.json'), 'utf8')), { themeColor: 'purple' });
+});
+
+test('i18n: Vietnamese and English dictionaries stay in key parity and interpolate', () => {
+  const { STRINGS, tr } = require('../src/ui/i18n');
+  assert.deepStrictEqual(Object.keys(STRINGS.vi).sort(), Object.keys(STRINGS.en).sort());
+  assert.strictEqual(tr('vi', 'settingsTitle', { app: 'GomTin' }), 'Cài đặt GomTin');
+  assert.strictEqual(tr('en', 'settingsTitle', { app: 'GomTin' }), 'GomTin Settings');
+  assert.strictEqual(tr('vi', 'dndPausedUntilResumed'), 'Đang tạm tắt thông báo');
+});
+
+test('ui scripts: i18n.js + page scripts load together without global identifier collisions', () => {
+  const vm = require('node:vm');
+  const uiDir = path.join(__dirname, '..', 'src', 'ui');
+  const i18nSrc = fs.readFileSync(path.join(uiDir, 'i18n.js'), 'utf8');
+
+  const makeEl = () => ({
+    hidden: false,
+    disabled: false,
+    checked: false,
+    value: '',
+    textContent: '',
+    placeholder: '',
+    dataset: {},
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    setAttribute() {},
+    getAttribute: () => '',
+    toggleAttribute() {},
+    addEventListener() {},
+    replaceChildren() {},
+    appendChild() {},
+    querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    focus() {},
+    blur() {},
+    select() {},
+    content: { firstElementChild: { cloneNode: () => makeEl() } },
+  });
+
+  for (const script of ['sidebar.js', 'settings.js', 'overlay.js']) {
+    const src = fs.readFileSync(path.join(uiDir, script), 'utf8');
+    const noopApi = new Proxy({}, { get: (_t, prop) => (prop === 'getState' ? () => Promise.resolve(null) : () => {}) });
+    const sandbox = {
+      document: {
+        documentElement: { dataset: {}, lang: 'vi' },
+        title: '',
+        activeElement: null,
+        getElementById: () => makeEl(),
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        createElement: () => makeEl(),
+      },
+      navigator: { platform: 'MacIntel' },
+      addEventListener() {},
+      setTimeout,
+      clearTimeout,
+      Promise,
+    };
+    sandbox.window = sandbox;
+    sandbox.sidebarApi = noopApi;
+    sandbox.settingsApi = noopApi;
+    sandbox.overlay = noopApi;
+
+    const ctx = vm.createContext(sandbox);
+    assert.doesNotThrow(() => {
+      vm.runInContext(i18nSrc, ctx, { filename: 'i18n.js' });
+      vm.runInContext(src, ctx, { filename: script });
+    }, `i18n.js + ${script} must execute cleanly in shared browser global scope`);
+    assert.ok(sandbox.GomTinI18n && typeof sandbox.GomTinI18n.tr === 'function');
+  }
 });

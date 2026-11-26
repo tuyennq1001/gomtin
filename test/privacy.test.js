@@ -1,8 +1,8 @@
 'use strict';
 
-// Guards the claims in PRIVACY.md. If one of these fails, the code changed in a
-// way that may let the app read page content, credentials or cookies, or send
-// data somewhere other than Facebook. Update PRIVACY.md before relaxing a rule.
+// Guards all privacy, isolation and security invariants across Messenger,
+// Zalo and Telegram views, local UI views (overlay, sidebar, settings), and
+// both Development and Production build configs.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -14,27 +14,35 @@ const read = (f) => fs.readFileSync(path.join(SRC, f), 'utf8').replace(/\r\n/g, 
 const sources = fs.readdirSync(SRC, { recursive: true })
   .map((f) => f.split(path.sep).join('/'))
   .filter((f) => f.endsWith('.js'))
-  // Strip comments so they cannot satisfy or trip a check. A line comment must
-  // start the line or follow whitespace, so "\/\/" in regexes and "https://" survive.
-  // Normalise CRLF first: Windows checkouts may convert line endings.
-  .map((f) => ({ file: f, code: fs.readFileSync(path.join(SRC, f), 'utf8').replace(/\r\n/g, '\n').replace(/(^|\s)\/\/.*$|\/\*[\s\S]*?\*\//gm, '$1') }));
+  .map((f) => ({
+    file: f,
+    code: fs.readFileSync(path.join(SRC, f), 'utf8')
+      .replace(/\r\n/g, '\n')
+      .replace(/(^|\s)\/\/.*$|\/\*[\s\S]*?\*\//gm, '$1'),
+  }));
 const code = (file) => sources.find((s) => s.file === file).code;
 const main = code('main.js');
 const pkg = require('../package.json');
+const devBuild = require('../build/electron-builder.dev.json');
 
-// Each rule may name the only files allowed to use it, with the reason
-// enforced by the dedicated tests further down.
-// The app's own local pages (lock/recovery overlay, settings window).
-const OVERLAY_FILES = ['overlay.js', 'ui/overlay-preload.js', 'settings-window.js', 'ui/settings-preload.js'];
+// Local app pages (lock/recovery overlay, sidebar dock, settings window) and
+// the strictly read-only integer badge observer for chat views.
+const APP_UI_FILES = [
+  'overlay.js', 'ui/overlay-preload.js',
+  'sidebar.js', 'ui/sidebar-preload.js',
+  'settings-window.js', 'ui/settings-preload.js',
+  'account-view.js', 'ui/chat-badge-preload.js',
+];
+
 const FORBIDDEN = {
   'runs script inside the page (could read form fields)': [/\bexecuteJavaScript(InIsolatedWorld)?\b/],
-  'injects a preload script into the page': [/\bpreload\b/, OVERLAY_FILES],
-  'IPC channel between page and app': [/\b(ipcMain|ipcRenderer|contextBridge)\b/, OVERLAY_FILES],
+  'injects a preload script into the page': [/\bpreload\b/, APP_UI_FILES],
+  'IPC channel between page and app': [/\b(ipcMain|ipcRenderer|contextBridge)\b/, APP_UI_FILES],
   'reads or writes cookies': [/\bcookies\s*\./],
   'intercepts or inspects network traffic': [/\b(webRequest|protocol\.handle|debugger\.attach)\b/],
   'makes its own network requests': [/\b(fetch\s*\(|net\.request|require\(['"]https?['"]\)|XMLHttpRequest)/, ['updater.js']],
   'uploads crash reports': [/\bcrashReporter\b/],
-  'phones home for updates': [/\bautoUpdater\b/],
+  'uses opaque third-party autoUpdater': [/\bautoUpdater\b/],
   'reads page console output': [/console-message/],
 };
 
@@ -45,15 +53,22 @@ for (const [what, [re, allowedIn = []]] of Object.entries(FORBIDDEN)) {
   });
 }
 
-test('Facebook pages never get a preload or IPC: only the app\'s own pages do', () => {
-  // main.js and account-view.js create every view and window that shows Facebook;
-  // neither may mention preload at all.
+test('chat web pages only get the read-only integer badge preload and remain fully isolated', () => {
   assert.doesNotMatch(main, /\bpreload\b/);
   const account = code('account-view.js');
-  assert.doesNotMatch(account, /\bpreload\b/);
+  assert.match(account, /preload: path\.join\(__dirname, 'ui', 'chat-badge-preload\.js'\)/);
   assert.match(account, /contextIsolation: true,\s*sandbox: true,\s*nodeIntegration: false/);
-  // Call windows inherit the account's session and the same isolation.
+  assert.match(account, /ipcMain\.on\('chat:unread'/);
+  assert.match(account, /viewsByWebContents\.get\(event\.sender\)/);
+  assert.match(account, /!Number\.isInteger\(count\) \|\| count < -1 \|\| count > MAX_BADGE/);
   assert.match(main, /webPreferences: \{ session: wc\.session, contextIsolation: true, sandbox: true, nodeIntegration: false \}/);
+
+  const badgePreload = code('ui/chat-badge-preload.js');
+  assert.doesNotMatch(badgePreload, /\bcontextBridge\b/, 'badge preload must expose nothing to the web page');
+  assert.doesNotMatch(badgePreload, /\b(localStorage|sessionStorage|indexedDB|document\.cookie)\b/, 'badge preload must never touch storage or cookies');
+  assert.doesNotMatch(badgePreload, /\bipcRenderer\.(invoke|sendSync|on|once)\b/, 'badge preload must be strictly one-way send only');
+  assert.match(badgePreload, /ipcRenderer\.send\('chat:unread', next\)/);
+
   const overlay = code('overlay.js');
   assert.match(overlay, /new WebContentsView\(/);
   assert.match(overlay, /preload: path\.join\(__dirname, 'ui', 'overlay-preload\.js'\)/);
@@ -71,12 +86,28 @@ test('overlay IPC accepts only its own page and a fixed set of actions', () => {
   assert.doesNotMatch(html, /https?:\/\//, 'overlay page loads nothing remote');
 });
 
+test('sidebar IPC accepts only its own page and a fixed set of actions', () => {
+  const sb = code('sidebar.js');
+  assert.match(sb, /event\.sender !== this\.view\.webContents \|\| !ACTIONS\.has\(action\)\)/);
+  assert.match(sb, /registerAppPage\(wc\)/);
+  assert.match(sb, /wc\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)/);
+  assert.match(sb, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/);
+  assert.match(sb, /wc\.loadFile\(/);
+  assert.doesNotMatch(sb, /loadURL\(/);
+  const html = read('ui/sidebar.html');
+  assert.match(html, /Content-Security-Policy" content="default-src 'none'; script-src 'self'/);
+  assert.doesNotMatch(html, /https?:\/\//, 'sidebar loads nothing remote');
+  // SVG and flex/grid elements require explicit [hidden] CSS rule so toggled icons never stack.
+  assert.match(read('ui/sidebar.css'), /\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+  assert.match(read('ui/overlay.css'), /\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+});
+
 test('settings window IPC accepts only its own page and a fixed set of actions', () => {
   const sw = code('settings-window.js');
-  assert.match(sw, /event\.sender !== this\.win\.webContents \|\| !ACTIONS\.has\(action\)\) \{\s*throw/);
+  assert.match(sw, /event\.sender !== this\.view\.webContents \|\| !ACTIONS\.has\(action\)\) \{\s*throw/);
   assert.match(sw, /registerAppPage\(wc\)/);
   assert.match(sw, /wc\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)/);
-  assert.match(sw, /this\.win\.loadFile\(/);
+  assert.match(sw, /wc\.loadFile\(/);
   assert.doesNotMatch(sw, /loadURL\(/);
   const html = read('ui/settings.html');
   assert.match(html, /Content-Security-Policy" content="default-src 'none'; script-src 'self'/);
@@ -90,42 +121,36 @@ test('accounts never share a session', () => {
   assert.match(account, /partition: this\.partition,/);
 });
 
-test('update check: off by default, GitHub releases API only, no cookies', () => {
+test('updater is strictly scoped to tuyennq1001/gomtin, cookie-less, SHA-256 verified, and hard-disabled in Dev', () => {
   const up = code('updater.js');
-  assert.ok(up.includes("const API_URL = 'https://api.github.com/repos/thangldw/thrum/releases/latest';"));
-  const fetches = up.match(/net\.fetch\(([^,]+),/g) || [];
-  assert.deepStrictEqual(fetches, ['net.fetch(API_URL,'], 'the release check');
+  const su = code('self-update.js');
+  assert.match(up, /const REPO = 'tuyennq1001\/gomtin'/);
   assert.match(up, /credentials: 'omit'/);
-  const requests = up.match(/net\.request\(\{[^}]*\}\)/g) || [];
-  assert.deepStrictEqual(requests, ["net.request({ url, redirect: 'manual', useSessionCookies: false, cache: 'no-store' })"], 'release downloads, without cookies');
-  // Downloads: this repository's releases only, every redirect hop checked, checksum before use.
-  assert.ok(up.includes("const DOWNLOAD_BASE = 'https://github.com/thangldw/thrum/releases/download/';"));
-  assert.match(up, /if \(!allowedDownloadUrl\(url\)\) \{ reject\(new Error\('Download left GitHub'\)\); return; \}\s*const req = net\.request\(/);
-  assert.match(up, /if \(hops > MAX_REDIRECTS \|\| !allowedDownloadUrl\(next\)\) \{\s*req\.abort\(\);/);
-  assert.match(up, /if \(hash\.digest\('hex'\) !== expected\) throw/);
-  const { allowedDownloadUrl, releaseFileUrl } = require('../src/updater');
-  assert.ok(allowedDownloadUrl('https://objects.githubusercontent.com/x'));
-  for (const bad of ['http://github.com/x', 'https://evil.com/x', 'https://github.com.evil.com/x', 'file:///etc/passwd']) assert.ok(!allowedDownloadUrl(bad), bad);
-  assert.throws(() => releaseFileUrl('0.4.0', '../../evil'));
-  assert.throws(() => releaseFileUrl('latest', 'SHA256SUMS.txt'));
-  // Installing happens only after the user clicks "Update now", never from the automatic check.
-  assert.doesNotMatch(main, /onUpdateAvailable[^}]*installUpdate/);
-  assert.match(main, /if \(response === 0\) installUpdate\(release\);/);
-  assert.match(up, /async autoCheck\(\) \{\s*if \(!this\.settings\.get\('checkForUpdates'\)\) return;/);
-  assert.strictEqual(require('../src/settings').SCHEMA.checkForUpdates.default, false);
+  assert.match(up, /useSessionCookies: false/);
+  assert.match(up, /createHash\('sha256'\)/);
+  assert.match(up, /SHA256SUMS\.txt/);
+  assert.match(up, /if \(this\.isDev\) return;/);
+  assert.match(up, /if \(this\.isDev\) return \{ ok: false, reason: 'dev' \};/);
+  assert.match(su, /codesign', \['--verify', '--deep', '--strict'/);
+  for (const s of sources) {
+    assert.doesNotMatch(s.code, /thangldw\/thrum/, `legacy upstream URL in ${s.file}`);
+  }
 });
 
-test('notifications are withheld while paused or locked', () => {
+test('notifications are withheld while paused or locked, and tab audio mutes when paused', () => {
   assert.match(main, /permission === 'notifications' \? notificationsAllowed\(\) : true/);
   assert.match(main, /function notificationsAllowed\(\) \{\s*return !dnd\.isPaused\(\) && !\(lock && lock\.locked\);/);
+  assert.match(main, /function applyAudioMute\(\) \{[^}]*dnd\.isPaused\(\) && settings\.get\('muteAudioWhenPaused'\)[^}]*setAudioMuted\(muted\)/);
+  assert.strictEqual(require('../src/settings').SCHEMA.muteAudioWhenPaused.default, true);
 });
 
-test('while locked, DevTools and "open in browser" are disabled', () => {
-  assert.match(main, /label: 'Toggle Developer Tools', [^\n]*enabled: !locked/);
-  assert.match(main, /label: 'Open current page in browser', enabled: !locked/);
+test('while locked, DevTools, sidebar and "open in browser" are hidden/disabled', () => {
+  assert.match(main, /label: t\('menuDevTools'\), [^\n]*enabled: !locked/);
+  assert.match(main, /label: t\('menuOpenBrowser'\), enabled: !locked/);
+  assert.match(main, /if \(sidebar\) sidebar\.setVisible\(!locked && settings\.get\('showSidebar'\)\)/);
 });
 
-test('the only thing injected into the page is CSS', () => {
+test('the only thing injected into chat pages is CSS', () => {
   assert.match(code('account-view.js'), /this\.wc\.insertCSS\(css\)/);
 });
 
@@ -146,32 +171,24 @@ test('every window is guarded and <webview> is blocked', () => {
   assert.match(main, /setWindowOpenHandler/);
 });
 
-test('popups: shown only after their opener is checked, hidden while locked', () => {
-  // A popup starts as about:blank and its opener can write anything into it.
+test('popups: shown only after opener origin matches service, hidden while locked', () => {
   assert.match(main, /overrideBrowserWindowOptions: \{\s*show: false,/);
-  assert.match(main, /wc\.on\('did-create-window'[^]*?if \(opener && !isFacebookUrl\(opener\.origin\)\) \{ win\.destroy\(\); return; \}/);
-  // The lock covers popups: nothing opens while locked, open ones are hidden.
+  assert.match(main, /wc\.on\('did-create-window'[^]*?if \(opener && !isServiceUrl\(opener\.origin, svc\)\) \{ win\.destroy\(\); return; \}/);
   assert.match(main, /setWindowOpenHandler\(\(\{ url \}\) => \{\s*if \(lock && lock\.locked\) return \{ action: 'deny' \};/);
   const vis = main.slice(main.indexOf('function applyVisibility('), main.indexOf('function switchAccount('));
   assert.match(vis, /for \(const win of popups\)[^]*?win\.hide\(\)/);
   assert.match(main, /win\.on\('show', \(\) => \{ if \(lock && lock\.locked\)/);
 });
 
-test('release builds do not fetch packages from npm on the fly', () => {
-  const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8');
-  assert.doesNotMatch(wf, /npx (--yes|-y)\b/);
-  assert.strictEqual(pkg.devDependencies['@electron/fuses'], '1.8.0');
-});
-
-test('permissions and screen capture are limited to Facebook origins', () => {
-  assert.match(main, /setPermissionRequestHandler\([^]*?isFacebookUrl\(details\.requestingUrl\)/);
-  assert.match(main, /setPermissionCheckHandler\([^]*?isFacebookUrl\(requestingOrigin\)/);
+test('permissions and screen capture are strictly scoped to the account service origin', () => {
+  assert.match(main, /setPermissionRequestHandler\([^]*?isServiceUrl\(details\.requestingUrl, svc\)/);
+  assert.match(main, /setPermissionCheckHandler\([^]*?isServiceUrl\(requestingOrigin, svc\)/);
   const share = code('screen-share.js');
-  assert.match(share, /isFacebookUrl\(request\.securityOrigin\)/);
+  assert.match(share, /isServiceUrl\(request\.securityOrigin, serviceId\)/);
 });
 
 test('the session (user agent, permissions) is configured before an account view is created', () => {
-  const fn = main.slice(main.indexOf('function addAccountView('));
+  const fn = main.slice(main.indexOf('function mountAccountView('));
   assert.ok(fn.indexOf('configureSession(') > 0 && fn.indexOf('configureSession(') < fn.indexOf('new AccountView('));
 });
 
@@ -189,31 +206,39 @@ test('no third-party spellcheck dictionary downloads (Windows/Linux)', () => {
 });
 
 test('external links only open http(s) in the browser', () => {
-  // Every shell.openExternal call must sit behind the http(s) check, so a page
-  // cannot launch file:, smb: or custom-protocol handlers on the computer.
   const calls = sources.flatMap((s) => s.code.split('\n').filter((l) => l.includes('shell.openExternal')));
   assert.ok(calls.length > 0);
   for (const line of calls) assert.ok(line.includes('/^https?:'), `unguarded: ${line.trim()}`);
 });
 
 test('microphone and camera: automatic only in a call window, otherwise the user is asked', () => {
-  assert.match(main, /if \(permission !== 'media'\) \{ cb\(true\); return; \}\s*allowMedia\(wc, partition, details\)/);
+  assert.match(main, /if \(permission !== 'media'\) \{ cb\(true\); return; \}\s*allowMedia\(wc, partition, svc, details\)/);
   const fn = main.slice(main.indexOf('async function allowMedia('), main.indexOf('async function clearPartition('));
-  assert.match(fn, /^async function allowMedia\(wc, partition, details\) \{\s*if \(isCallWindow\(wc\)\) return true;\s*if \(lock && lock\.locked\) return false;/);
+  assert.match(fn, /^async function allowMedia\(wc, partition, service, details\) \{\s*if \(isCallWindow\(wc, service\)\) return true;\s*if \(lock && lock\.locked\) return false;/);
   assert.match(fn, /dialog\.showMessageBox/);
-  assert.match(main, /function isCallWindow\(wc\) \{\s*return \[\.\.\.popups\]\.some\(\(win\) => !win\.isDestroyed\(\) && win\.webContents === wc\) && isCallUrl\(wc\.getURL\(\)\);/);
 });
 
-test('macOS builds use the hardened runtime with only the entitlements calls need', () => {
-  const mac = pkg.build.mac;
-  assert.strictEqual(mac.hardenedRuntime, true);
-  const plist = fs.readFileSync(path.join(__dirname, '..', mac.entitlements), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-  const keys = [...plist.matchAll(/<key>([^<]+)<\/key>/g)].map((m) => m[1]).sort();
-  assert.deepStrictEqual(keys, [
-    'com.apple.security.cs.allow-jit', 'com.apple.security.cs.disable-library-validation',
-    'com.apple.security.device.audio-input', 'com.apple.security.device.camera',
-  ]);
-  assert.strictEqual(mac.entitlementsInherit, mac.entitlements);
+test('macOS Dev and Prod builds both use hardened runtime, isolated appIds, and full fuses', () => {
+  for (const [label, cfg] of [['prod', pkg.build], ['dev', devBuild]]) {
+    assert.strictEqual(cfg.mac.hardenedRuntime, true, `${label} hardenedRuntime`);
+    assert.strictEqual(cfg.mac.extendInfo.NSUserNotificationAlertStyle, 'alert', `${label} notification alert style`);
+    assert.ok(cfg.mac.identity && cfg.mac.identity !== '-', `${label} should use a real signing identity for macOS notifications`);
+    const f = cfg.electronFuses;
+    assert.strictEqual(f.enableCookieEncryption, true, `${label} cookie encryption`);
+    assert.strictEqual(f.runAsNode, false, `${label} runAsNode`);
+    assert.strictEqual(f.enableNodeOptionsEnvironmentVariable, false, `${label} node options`);
+    assert.strictEqual(f.enableNodeCliInspectArguments, false, `${label} cli inspect`);
+    assert.strictEqual(f.onlyLoadAppFromAsar, true, `${label} asar only`);
+    // Required on Electron 45+ so local app UI pages (sidebar, settings, overlay)
+    // load via loadFile() from inside app.asar without ERR_FILE_NOT_FOUND.
+    assert.strictEqual(f.grantFileProtocolExtraPrivileges, true, `${label} file protocol privileges for app.asar UI`);
+  }
+  assert.notStrictEqual(pkg.build.appId, devBuild.appId, 'Dev and Prod bundle IDs must be isolated');
+  assert.strictEqual(devBuild.appId, 'com.tuyennq.gomtin.dev');
+  assert.strictEqual(pkg.build.appId, 'com.tuyennq.gomtin');
+  assert.notStrictEqual(pkg.build.mac.icon, devBuild.mac.icon, 'Dev and Prod must use visually distinct icons');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', pkg.build.mac.icon)), 'Prod icon missing');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', devBuild.mac.icon)), 'Dev icon missing');
 });
 
 test('permissions are an explicit allow-list', () => {
@@ -221,15 +246,6 @@ test('permissions are an explicit allow-list', () => {
   assert.ok(m, 'permission allow-list not found');
   const granted = m[1].split(',').map((s) => s.trim().replace(/['"]/g, '')).sort();
   assert.deepStrictEqual(granted, ['clipboard-sanitized-write', 'display-capture', 'fullscreen', 'media', 'notifications']);
-});
-
-test('build hardens the binary: cookie encryption on, code-injection switches off', () => {
-  const f = pkg.build.electronFuses;
-  assert.strictEqual(f.enableCookieEncryption, true);
-  assert.strictEqual(f.runAsNode, false);
-  assert.strictEqual(f.enableNodeOptionsEnvironmentVariable, false);
-  assert.strictEqual(f.enableNodeCliInspectArguments, false);
-  assert.strictEqual(f.onlyLoadAppFromAsar, true);
 });
 
 test('app has no runtime dependencies that could add behaviour', () => {

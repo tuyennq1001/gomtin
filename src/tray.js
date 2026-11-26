@@ -20,12 +20,13 @@ class AppTray {
    */
   constructor(handlers) {
     this.handlers = handlers;
+    this.appName = handlers.appName || 'GomTin';
     this.unread = 0;
     this.icons = isMac
       ? { normal: load('trayTemplate'), unread: load('trayUnreadTemplate') }
       : { normal: load('tray'), unread: load('trayUnread') };
     this.tray = new Tray(this.icons.normal);
-    this.tray.setToolTip('Thrum');
+    this.tray.setToolTip(this.appName);
     // Left click toggles the window; right click (or click on macOS with a
     // modifier) shows the menu. On Linux most trays only support the menu.
     this.tray.on('click', () => this.handlers.toggleWindow());
@@ -42,13 +43,13 @@ class AppTray {
     if (process.platform === 'linux') this.tray.setContextMenu(this.menu());
   }
 
-  setUnread(count, { paused = false } = {}) {
+  setUnread(count, { paused = false, unreadText, pausedText } = {}) {
     this.unread = count;
     this.tray.setImage(count > 0 ? this.icons.unread : this.icons.normal);
     if (isMac) this.tray.setTitle(count > 0 ? String(count) : '', { fontType: 'monospacedDigit' });
-    const parts = ['Thrum'];
-    if (count > 0) parts.push(`${count} unread`);
-    if (paused) parts.push('notifications paused');
+    const parts = [this.appName];
+    if (count > 0) parts.push(unreadText || `${count} unread`);
+    if (paused) parts.push(pausedText || 'notifications paused');
     this.tray.setToolTip(parts.join(' — '));
     this.refreshMenu();
   }

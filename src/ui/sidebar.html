@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi" data-theme="blue" data-mode="dark">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GomTin Sidebar</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <nav class="rail" aria-label="Tài khoản">
+    <div id="dev-badge" class="dev-pill" hidden title="Bản phát triển (dữ liệu tách biệt)">DEV</div>
+
+    <div id="account-rail" class="accounts" role="tablist" aria-orientation="vertical">
+      <div class="skeleton" aria-hidden="true"></div>
+    </div>
+
+    <button id="add-btn" type="button" class="rail-btn add-btn" title="Thêm tài khoản" aria-label="Thêm tài khoản">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <div class="spacer"></div>
+
+    <div class="utilities">
+      <button id="dnd-btn" type="button" class="rail-btn util-btn" title="Thông báo" aria-label="Thông báo">
+        <svg id="dnd-icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <svg id="dnd-icon-off" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><path d="M2 2l20 20"/></svg>
+      </button>
+
+      <button id="lock-btn" type="button" class="rail-btn util-btn" title="Khóa ngay" aria-label="Khóa ngay" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+
+      <button id="settings-btn" type="button" class="rail-btn util-btn" title="Cài đặt" aria-label="Cài đặt">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Service icon templates (local SVG only, zero external loads) -->
+  <template id="icon-messenger">
+    <svg class="svc-icon" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="15" fill="#0084FF"/>
+      <path d="M16 7.5c-4.97 0-9 3.74-9 8.35 0 2.63 1.31 4.97 3.36 6.51v3.14l3.08-1.69c.82.23 1.68.35 2.56.35 4.97 0 9-3.74 9-8.35S20.97 7.5 16 7.5zm.9 11.24l-2.3-2.45-4.48 2.45 4.93-5.23 2.35 2.45 4.43-2.45-4.93 5.23z" fill="#fff"/>
+    </svg>
+  </template>
+
+  <template id="icon-zalo">
+    <img class="svc-icon" src="../assets/zalo.svg" alt="">
+  </template>
+
+  <template id="icon-telegram">
+    <svg class="svc-icon" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="15" fill="#2AABEE"/>
+      <path d="M22.9 10.2l-2.55 12.05c-.19.86-.7 1.07-1.41.66l-3.9-2.88-1.88 1.81c-.21.21-.38.38-.78.38l.28-3.98 7.24-6.54c.31-.28-.07-.44-.49-.16l-8.95 5.63-3.86-1.21c-.84-.26-.85-.84.18-1.24l15.08-5.81c.7-.26 1.31.16 1.04 1.29z" fill="#fff"/>
+    </svg>
+  </template>
+
+  <script src="i18n.js"></script>
+  <script src="sidebar.js"></script>
+</body>
+</html>
