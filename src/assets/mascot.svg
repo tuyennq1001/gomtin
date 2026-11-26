@@ -1,48 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="gt-sky" x1="25%" y1="10%" x2="75%" y2="95%">
-      <stop offset="0%" stop-color="#74BAFF"/>
-      <stop offset="55%" stop-color="#4A9EFF"/>
-      <stop offset="100%" stop-color="#3586F2"/>
+    <linearGradient id="gt-g-grad" x1="10%" y1="90%" x2="90%" y2="10%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="45%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
     </linearGradient>
-    <linearGradient id="gt-gloss" x1="50%" y1="0%" x2="50%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.46"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.0"/>
+    <linearGradient id="gt-g-sheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="gt-mint" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#A7F3D0"/>
-      <stop offset="100%" stop-color="#5EEAD4"/>
-    </linearGradient>
-    <linearGradient id="gt-lav" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#DDD6FE"/>
-      <stop offset="100%" stop-color="#C084FC"/>
-    </linearGradient>
-    <filter id="gt-shadow" x="-15%" y="-15%" width="130%" height="135%">
-      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#1E3A5F" flood-opacity="0.22"/>
+    <filter id="gt-g-shadow" x="-14%" y="-12%" width="128%" height="132%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#2563EB" flood-opacity="0.24"/>
     </filter>
   </defs>
-  <!-- Left mini mint bubble -->
-  <g filter="url(#gt-shadow)">
-    <path d="M40 72h32c14 0 24 10 24 22v10c0 12-10 22-24 22H52l-13 11c-2 2-6 0-5-3l2-10c-12-3-20-11-20-20V94c0-12 10-22 24-22z" fill="url(#gt-mint)"/>
-    <ellipse cx="56" cy="84" rx="22" ry="8" fill="#FFFFFF" fill-opacity="0.34"/>
-  </g>
-  <!-- Right mini lavender bubble -->
-  <g filter="url(#gt-shadow)">
-    <path d="M168 42h44c17 0 30 12 30 27v11c0 15-13 27-30 27h-4l4 13c1 3-3 5-6 3l-17-16h-21c-17 0-30-12-30-27V69c0-15 13-27 30-27z" fill="url(#gt-lav)"/>
-    <ellipse cx="190" cy="57" rx="28" ry="10" fill="#FFFFFF" fill-opacity="0.34"/>
-  </g>
-  <!-- Main plump mochi blue bubble -->
-  <g filter="url(#gt-shadow)">
-    <path d="M128 54c54 0 94 35 94 79 0 43-40 78-94 78-11 0-22-1.5-32-4.4-13 12-27 17-36 16-5-.5-7-6-4-11 4-6 7-13 8-20-19-14-30-35-30-59 0-44 40-79 94-79z" fill="url(#gt-sky)"/>
-    <!-- Soft mochi top highlight crescent -->
-    <ellipse cx="128" cy="100" rx="68" ry="34" fill="url(#gt-gloss)"/>
-    <!-- Kawaii blush cheeks -->
-    <ellipse cx="83" cy="148" rx="15" ry="10" fill="#FF8F5E"/>
-    <ellipse cx="173" cy="148" rx="15" ry="10" fill="#FF8F5E"/>
-    <!-- Happy curved eyes ^ ^ -->
-    <path d="M77 128c6-14 22-14 28 0" fill="none" stroke="#2D1B10" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M151 128c6-14 22-14 28 0" fill="none" stroke="#2D1B10" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-    <!-- Cute u smile -->
-    <path d="M117 144c3 14 19 14 22 0" fill="none" stroke="#2D1B10" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <g filter="url(#gt-g-shadow)">
+    <g transform="translate(-66.56, -66.56) scale(0.38)">
+      <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="url(#gt-g-grad)"/>
+      <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="url(#gt-g-sheen)"/>
+      <path d="M604 396 A130 130 0 1 0 640 520 L640 502 L528 502" fill="none" stroke="#FFFFFF" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
   </g>
 </svg>

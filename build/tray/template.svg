@@ -1,13 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <mask id="face">
+    <mask id="g-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
       <rect width="64" height="64" fill="#fff"/>
-      <path d="M18 30c3-6 9-6 12 0" fill="none" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
-      <path d="M34 30c3-6 9-6 12 0" fill="none" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
-      <path d="M28 36c1.5 5 6.5 5 8 0" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+      <g transform="translate(-17.15, -17.15) scale(0.096)">
+        <path d="M604 396 A130 130 0 1 0 640 520 L640 502 L528 502" fill="none" stroke="#000" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
     </mask>
   </defs>
-  <g mask="url(#face)">
-    <path d="M32 10c15 0 26 9.5 26 21.5S47 53 32 53c-3.5 0-6.8-.5-9.8-1.4L12 57c-1.8.9-3.6-.8-2.8-2.6l2.4-6.4C8.1 44 6 38.1 6 31.5 6 19.5 17 10 32 10z" fill="#000"/>
+  <g mask="url(#g-cut)">
+    <g transform="translate(-17.15, -17.15) scale(0.096)">
+      <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="#000"/>
+    </g>
   </g>
 </svg>

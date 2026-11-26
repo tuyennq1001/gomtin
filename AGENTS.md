@@ -134,7 +134,7 @@ Khi giải quyết bất kỳ lỗi hoặc phát triển tính năng nào, bắt
   - Display Name: `GomTin`
   - Bundle Identifier: `com.tuyennq.gomtin`
   - UserData: `~/Library/Application Support/GomTin` (tự động migrate một lần từ `Messenger` nếu có)
-  - Icon chính thức: `build/icon.png` (Bóng chat Mochi Sky Blue kawaii trên nền Dark Charcoal, đồng bộ phong cách với Buzzy)
+  - Icon chính thức: `build/icon.png` (Bóng chat gradient xanh-tím với chữ `G` trắng tối giản trên nền trắng macOS, độc lập nhận diện GomTin)
   - Output build: `dist/mac-arm64/GomTin.app`
   - Vị trí cài đặt cục bộ: `~/Applications/GomTin.app`
   - Auto-Update Production: Kiểm tra định kỳ + tải ngầm trong nền từ GitHub Releases `tuyennq1001/gomtin` (không cookie, xác thực `SHA256SUMS.txt` + macOS `codesign --verify --deep --strict`, swap nguyên tử có rollback), có toggle bật/tắt và nút kiểm tra ngay trong Cài đặt.
