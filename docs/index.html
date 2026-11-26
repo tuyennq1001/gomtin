@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="blue" data-mode="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GomTin — Trung tâm nhắn tin tập trung &amp; riêng tư cho macOS</title>
+  <meta name="description" content="GomTin là ứng dụng desktop gọn nhẹ, riêng tư cho macOS giúp gom Facebook Messenger, Zalo Web và Telegram Web vào một cửa sổ duy nhất. Hỗ trợ tối đa 9 tài khoản độc lập, tắt tài khoản tiết kiệm RAM không cần đăng xuất, chặn Bảng tin Facebook, khóa Touch ID và 6 bảng màu Pastel.">
+  <meta name="keywords" content="GomTin, ứng dụng nhắn tin macOS, Messenger macOS, Zalo macOS, Telegram macOS, nhiều tài khoản chat, tiết kiệm RAM, khóa Touch ID">
+  <meta property="og:title" content="GomTin — Trung tâm nhắn tin tập trung &amp; riêng tư cho macOS">
+  <meta property="og:description" content="Gom Messenger, Zalo và Telegram vào một cửa sổ gọn nhẹ trên macOS: tối đa 9 tài khoản tách biệt, tắt tài khoản tiết kiệm RAM không cần đăng xuất, chặn Bảng tin Facebook, khóa Touch ID và 6 màu Pastel.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tuyennq1001.github.io/gomtin/">
+  <meta property="og:image" content="https://tuyennq1001.github.io/gomtin/assets/icon.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="GomTin — Distraction-Free Multi-Account Chat Hub for macOS">
+  <meta name="twitter:description" content="Facebook Messenger, Zalo Web &amp; Telegram Web in one private macOS window. Save RAM without logging out, Touch ID lock, no tracking.">
+  <meta name="twitter:image" content="https://tuyennq1001.github.io/gomtin/assets/icon.png">
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+  <script>
+    (function () {
+      try {
+        var root = document.documentElement;
+        var savedTheme = localStorage.getItem('gomtin-home-theme');
+        if (['blue', 'green', 'pink', 'orange', 'purple', 'red'].indexOf(savedTheme) !== -1) {
+          root.setAttribute('data-theme', savedTheme);
+        }
+        var savedMode = localStorage.getItem('gomtin-home-mode');
+        if (savedMode === 'light' || savedMode === 'dark') {
+          root.setAttribute('data-mode', savedMode);
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+          root.setAttribute('data-mode', 'light');
+        }
+        var savedLang = localStorage.getItem('gomtin-home-lang');
+        if (savedLang === 'en' || savedLang === 'vi') {
+          root.setAttribute('lang', savedLang);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Sticky Frosted-Glass Header -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#top" class="brand-link">
+        <img src="assets/icon.png" alt="GomTin Logo" class="brand-logo" width="36" height="36">
+        <span class="brand-wordmark">
+          <span class="brand-name">GomTin</span>
+          <span class="brand-pill" id="header-version-pill">v1.0.0</span>
+        </span>
+      </a>
+
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#features" data-i18n="navFeatures">Tính năng</a>
+        <a href="#security" data-i18n="navSecurity">Riêng tư &amp; Phím tắt</a>
+        <a href="#install" data-i18n="navInstall">Cài đặt</a>
+        <a href="#faq" data-i18n="navFaq">Hỏi đáp</a>
+      </nav>
+
+      <div class="header-actions">
+        <button id="lang-toggle" type="button" class="icon-pill-btn" aria-label="Switch language">
+          <span id="lang-toggle-label">VI</span>
+        </button>
+
+        <button id="mode-toggle" type="button" class="icon-btn" aria-label="Toggle light and dark theme" title="Đổi giao diện Sáng / Tối">
+          <svg id="mode-icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden>
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+          <svg id="mode-icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <a href="https://github.com/tuyennq1001/gomtin" target="_blank" rel="noopener noreferrer" class="icon-btn" aria-label="GitHub Repository" title="GitHub">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+          </svg>
+        </a>
+
+        <a href="https://github.com/tuyennq1001/gomtin/releases/latest" class="nav-download-btn js-download-link">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span data-i18n="navDownload">Tải bản mới nhất</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="hero-glow hero-glow-primary" aria-hidden="true"></div>
+      <div class="hero-glow hero-glow-secondary" aria-hidden="true"></div>
+
+      <div class="container hero-container">
+        <div class="eyebrow-pill">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          <span id="hero-eyebrow-text" data-i18n="heroEyebrow">macOS (Apple Silicon) • Messenger, Zalo &amp; Telegram • Miễn phí &amp; Mã nguồn mở</span>
+        </div>
+
+        <h1 class="hero-title">
+          <span data-i18n="heroTitleLine1">Gom mọi tin nhắn vào một nơi</span>
+          <br>
+          <span class="gradient-text" data-i18n="heroTitleLine2">tập trung và riêng tư</span>
+        </h1>
+
+        <p class="hero-subtitle" data-i18n="heroSubtitle">
+          Ứng dụng nhắn tin gọn nhẹ cho macOS. Mở song song Facebook Messenger, Zalo Web và Telegram Web tới 9 tài khoản tách biệt, tắt tài khoản tiết kiệm RAM không cần đăng xuất, chặn Bảng tin Facebook và bảo vệ bằng Touch ID.
+        </p>
+
+        <!-- Primary CTAs -->
+        <div class="hero-cta-row">
+          <a href="https://github.com/tuyennq1001/gomtin/releases/latest" class="btn-primary js-download-link">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8.92-2.85-.9.04-2 .6-2.65 1.35-.58.66-1.09 1.73-.95 2.76 1 .08 2.05-.51 2.68-1.26z"></path>
+            </svg>
+            <span id="hero-download-label" data-i18n="heroDownload">Tải cho macOS (.zip)</span>
+          </a>
+
+          <a href="https://github.com/tuyennq1001/gomtin" target="_blank" rel="noopener noreferrer" class="btn-secondary">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+            </svg>
+            <span data-i18n="heroGithub">Mã nguồn GitHub</span>
+          </a>
+        </div>
+
+        <!-- Trust Badges (Plain Vietnamese / English) -->
+        <div class="trust-row">
+          <span class="trust-item">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <polyline points="9 12 11 14 15 10"></polyline>
+            </svg>
+            <span data-i18n="trustOpenSource">Mã nguồn mở Apache-2.0 • Không thu thập dữ liệu</span>
+          </span>
+          <span class="trust-item">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span data-i18n="trustIsolation">Tách biệt từng tài khoản • Không đọc tin nhắn</span>
+          </span>
+          <span class="trust-item">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span data-i18n="trustIntegrity">Khóa Touch ID • Cập nhật kiểm tra toàn vẹn</span>
+          </span>
+        </div>
+
+        <!-- Pastel Palette Live Switcher -->
+        <div class="palette-bar" role="radiogroup" aria-label="Pastel theme selector">
+          <span class="palette-label" data-i18n="paletteTry">Thử 6 bảng màu Pastel:</span>
+          <div class="palette-swatches">
+            <button type="button" class="swatch-btn" data-theme-choice="blue" role="radio" aria-checked="true" aria-label="Sky Blue" title="Xanh Bầu Trời / Sky Blue"></button>
+            <button type="button" class="swatch-btn" data-theme-choice="green" role="radio" aria-checked="false" aria-label="Mint Green" title="Xanh Bạc Hà / Mint Green"></button>
+            <button type="button" class="swatch-btn" data-theme-choice="pink" role="radio" aria-checked="false" aria-label="Strawberry Pink" title="Hồng Dâu Tây / Strawberry Pink"></button>
+            <button type="button" class="swatch-btn" data-theme-choice="orange" role="radio" aria-checked="false" aria-label="Sunny Peach" title="Cam Đào / Sunny Peach"></button>
+            <button type="button" class="swatch-btn" data-theme-choice="purple" role="radio" aria-checked="false" aria-label="Lavender Purple" title="Tím Lavender / Lavender Purple"></button>
+            <button type="button" class="swatch-btn" data-theme-choice="red" role="radio" aria-checked="false" aria-label="Tomato Red" title="Đỏ Cà Chua / Tomato Red"></button>
+          </div>
+        </div>
+
+        <!-- Interactive macOS Desktop Chat Preview Mockup -->
+        <div class="mockup-frame">
+          <div class="macos-window" id="preview-window">
+            <!-- macOS Titlebar -->
+            <div class="macos-titlebar">
+              <div class="traffic-lights" aria-hidden="true">
+                <span class="tl tl-close"></span>
+                <span class="tl tl-min"></span>
+                <span class="tl tl-max"></span>
+              </div>
+
+              <div class="window-title">
+                <img src="assets/icon.png" alt="" width="16" height="16">
+                <span id="preview-title-text">GomTin — Facebook Messenger</span>
+              </div>
+
+              <div class="titlebar-tools">
+                <button type="button" id="preview-blur-btn" class="mini-pill-btn" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                  <span data-i18n="previewBlurBtn">Làm mờ riêng tư</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Window Body: 58px Sidebar Rail + Live Chat Workspace -->
+            <div class="macos-body">
+              <!-- Authentic 58px GomTin Rail -->
+              <aside class="mock-rail" aria-label="GomTin sidebar preview">
+                <div class="mock-accounts" role="tablist" aria-orientation="vertical">
+                  <div class="mock-acc-item active" data-pane-item="messenger">
+                    <button type="button" class="mock-rail-btn mock-acc-btn" role="tab" aria-selected="true" data-pane="messenger" title="Messenger (⌘1)">
+                      <svg class="svc-icon" viewBox="0 0 32 32" aria-hidden="true">
+                        <circle cx="16" cy="16" r="15" fill="#0084FF"></circle>
+                        <path d="M16 7.5c-4.97 0-9 3.74-9 8.35 0 2.63 1.31 4.97 3.36 6.51v3.14l3.08-1.69c.82.23 1.68.35 2.56.35 4.97 0 9-3.74 9-8.35S20.97 7.5 16 7.5zm.9 11.24l-2.3-2.45-4.48 2.45 4.93-5.23 2.35 2.45 4.43-2.45-4.93 5.23z" fill="#fff"></path>
+                      </svg>
+                      <span class="mock-badge">3</span>
+                    </button>
+                  </div>
+
+                  <div class="mock-acc-item" data-pane-item="zalo">
+                    <button type="button" class="mock-rail-btn mock-acc-btn" role="tab" aria-selected="false" data-pane="zalo" title="Zalo Web (⌘2)">
+                      <img class="svc-icon" src="assets/zalo.svg" alt="" width="24" height="24">
+                      <span class="mock-badge">1</span>
+                    </button>
+                  </div>
+
+                  <div class="mock-acc-item" data-pane-item="telegram">
+                    <button type="button" class="mock-rail-btn mock-acc-btn" role="tab" aria-selected="false" data-pane="telegram" title="Telegram Web (⌘3)">
+                      <svg class="svc-icon" viewBox="0 0 32 32" aria-hidden="true">
+                        <circle cx="16" cy="16" r="15" fill="#2AABEE"></circle>
+                        <path d="M22.9 10.2l-2.55 12.05c-.19.86-.7 1.07-1.41.66l-3.9-2.88-1.88 1.81c-.21.21-.38.38-.78.38l.28-3.98 7.24-6.54c.31-.28-.07-.44-.49-.16l-8.95 5.63-3.86-1.21c-.84-.26-.85-.84.18-1.24l15.08-5.81c.7-.26 1.31.16 1.04 1.29z" fill="#fff"></path>
+                      </svg>
+                      <span class="mock-sleep-tag" id="rail-tg-sleep" hidden>zzZ</span>
+                    </button>
+                  </div>
+                </div>
+
+                <button type="button" class="mock-rail-btn mock-add-btn" data-pane="settings" title="Thêm tài khoản / Cài đặt" aria-label="Open settings preview">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <path d="M12 5v14M5 12h14"></path>
+                  </svg>
+                </button>
+
+                <div class="mock-spacer"></div>
+
+                <div class="mock-utilities">
+                  <button type="button" id="preview-dnd-btn" class="mock-rail-btn mock-util-btn" aria-pressed="false" title="Tạm dừng thông báo">
+                    <svg id="preview-dnd-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <svg id="preview-dnd-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                      <path d="M18.63 13A17.89 17.89 0 0 1 18 8"></path>
+                      <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"></path>
+                      <path d="M18 8a6 6 0 0 0-9.33-5"></path>
+                      <path d="M2 2l20 20"></path>
+                    </svg>
+                  </button>
+
+                  <button type="button" id="preview-lock-btn" class="mock-rail-btn mock-util-btn" aria-pressed="false" title="Khóa ứng dụng (⌘⇧L)">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="4" y="11" width="16" height="10" rx="2.5"></rect>
+                      <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+                    </svg>
+                  </button>
+
+                  <button type="button" id="preview-settings-btn" class="mock-rail-btn mock-util-btn" data-pane="settings" title="Cài đặt (⌘,)">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l-.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                  </button>
+                </div>
+              </aside>
+
+              <!-- Interactive Content Stage -->
+              <div class="mock-stage" id="mock-stage">
+                <!-- DND Status Ribbon -->
+                <div class="mock-dnd-banner" id="mock-dnd-banner" hidden>
+                  <span class="dnd-dot" aria-hidden="true"></span>
+                  <span data-i18n="previewDndActive">Đang bật Chế độ Tập trung — Thông báo tạm dừng &amp; âm thanh tab đã tắt tiếng</span>
+                </div>
+
+                <!-- 2-Column Realistic Chat Workspace (Messenger / Zalo / Telegram) -->
+                <div class="chat-workspace" id="chat-workspace">
+                  <!-- Left: Conversation List -->
+                  <div class="chat-sidebar">
+                    <div class="chat-sidebar-head">
+                      <span class="chat-service-title" id="chat-service-title">Messenger</span>
+                      <span class="chat-shortcut-chip" id="chat-shortcut-chip">⌘1</span>
+                    </div>
+                    <div class="chat-search-box" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      </svg>
+                      <span id="chat-search-placeholder" data-i18n="chatSearchPlaceholder">Tìm kiếm đoạn chat…</span>
+                    </div>
+                    <div class="chat-thread-list" id="chat-thread-list" role="listbox" aria-label="Conversations"></div>
+                  </div>
+
+                  <!-- Right: Active Conversation -->
+                  <div class="chat-main">
+                    <div class="chat-topbar">
+                      <div class="chat-peer">
+                        <span class="chat-avatar" id="chat-active-avatar">MA</span>
+                        <div class="chat-peer-meta">
+                          <div class="chat-peer-name" id="chat-active-name">Minh Anh</div>
+                          <div class="chat-peer-status">
+                            <span class="online-dot" id="chat-active-dot" aria-hidden="true"></span>
+                            <span id="chat-active-status">Đang hoạt động</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="chat-topbar-right">
+                        <span class="shield-pill" id="chat-service-pill">Đã chặn Bảng tin</span>
+                        <label class="ram-toggle-chip" id="tg-ram-toggle-wrap" hidden>
+                          <span data-i18n="paneTgRamLabel">Tiết kiệm RAM</span>
+                          <input type="checkbox" id="preview-tg-sleep-toggle" class="mini-switch">
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+
+                    <form class="chat-composer" id="chat-composer" autocomplete="off">
+                      <span class="composer-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="9"></circle>
+                          <line x1="12" y1="8" x2="12" y2="16"></line>
+                          <line x1="8" y1="12" x2="16" y2="12"></line>
+                        </svg>
+                      </span>
+                      <input type="text" id="chat-input" class="composer-input" maxlength="160" placeholder="Nhắn tin cho Minh Anh…" aria-label="Try sending a preview message">
+                      <button type="submit" class="composer-send" aria-label="Send message">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <line x1="22" y1="2" x2="11" y2="13"></line>
+                          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Telegram RAM Sleep View -->
+                <div class="mock-pane-padded" id="tg-sleep-view" hidden>
+                  <div class="sleep-card">
+                    <div class="sleep-icon" aria-hidden="true">🌙</div>
+                    <h4 data-i18n="tgSleepTitle">Telegram đang tạm nghỉ — Đã giải phóng RAM</h4>
+                    <p data-i18n="tgSleepBody">Tiến trình chạy ngầm đã được tắt để máy nhẹ hơn. Phiên đăng nhập vẫn được giữ nguyên trên máy — bật lại là vào chat ngay không cần quét mã QR.</p>
+                    <button type="button" id="tg-wake-btn" class="mini-primary-btn" data-i18n="tgWakeBtn">Bật lại tài khoản ngay</button>
+                  </div>
+                </div>
+
+                <!-- Embedded Single-Window Settings Preview -->
+                <div class="mock-pane-padded" id="settings-pane" hidden>
+                  <div class="pane-head">
+                    <div class="pane-head-left">
+                      <img src="assets/icon.svg" alt="" width="24" height="24">
+                      <div>
+                        <div class="pane-title" data-i18n="paneSetTitle">Cài đặt nhúng GomTin</div>
+                        <div class="pane-sub" data-i18n="paneSetSub">Tài khoản • Lịch tập trung • Giao diện • Cập nhật</div>
+                      </div>
+                    </div>
+                    <span class="shield-pill">3 / 9</span>
+                  </div>
+
+                  <div class="settings-preview-list">
+                    <div class="settings-preview-row">
+                      <span class="row-left">
+                        <span class="pane-svc-dot svc-messenger"></span>
+                        <strong>Facebook Messenger</strong>
+                        <span class="row-chip" data-i18n="rowChipOn">Đang chạy</span>
+                      </span>
+                      <span class="row-right">⌘1</span>
+                    </div>
+                    <div class="settings-preview-row">
+                      <span class="row-left">
+                        <span class="pane-svc-dot svc-zalo"></span>
+                        <strong>Zalo Web</strong>
+                        <span class="row-chip" data-i18n="rowChipOn">Đang chạy</span>
+                      </span>
+                      <span class="row-right">⌘2</span>
+                    </div>
+                    <div class="settings-preview-row">
+                      <span class="row-left">
+                        <span class="pane-svc-dot svc-telegram"></span>
+                        <strong>Telegram Web</strong>
+                        <span class="row-chip" id="settings-tg-chip" data-i18n="rowChipOn">Đang chạy</span>
+                      </span>
+                      <button type="button" id="settings-tg-toggle-btn" class="mini-pill-btn" data-i18n="rowToggleSleep">Tắt để tiết kiệm RAM</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Interactive Privacy Blur Overlay Caption -->
+                <div class="mock-blur-badge" id="mock-blur-badge" hidden>
+                  <span data-i18n="previewBlurNote">Màn hình riêng tư đang làm mờ đoạn chat khi bạn rời cửa sổ</span>
+                </div>
+
+                <!-- Interactive App Lock + Touch ID Overlay -->
+                <div class="mock-lock-overlay" id="mock-lock-overlay" hidden>
+                  <div class="lock-card">
+                    <img src="assets/icon.png" alt="" width="44" height="44" class="lock-logo">
+                    <h4 data-i18n="lockTitle">GomTin đang được khóa</h4>
+                    <p data-i18n="lockDesc">Tự động khóa khi gập máy, khóa màn hình hoặc không thao tác sau 1–60 phút.</p>
+                    <button type="button" id="preview-unlock-btn" class="mini-primary-btn">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"></path>
+                      </svg>
+                      <span data-i18n="lockTouchIdBtn">Mở khóa bằng Touch ID</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Features Section -->
+    <section id="features" class="section section-tinted">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-eyebrow" data-i18n="featEyebrow">Ưu điểm nổi bật</p>
+          <h2 class="section-title" data-i18n="featTitle">Tất cả kênh trò chuyện, gọn gàng và tiết kiệm tài nguyên</h2>
+          <p class="section-desc" data-i18n="featDesc">Thiết kế dành cho nhu cầu làm việc tập trung hằng ngày trên macOS — không quảng cáo, không theo dõi và không làm nặng máy.</p>
+        </div>
+
+        <div class="features-grid">
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-blue" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+              </svg>
+            </div>
+            <h3 data-i18n="f1Title">3 nền tảng, tối đa 9 tài khoản</h3>
+            <p data-i18n="f1Desc">Chạy song song Facebook Messenger, Zalo Web và Telegram Web trên thanh bên gọn 58px. Mỗi tài khoản lưu phiên đăng nhập tách biệt và chuyển tức thì bằng phím tắt ⌘1…9.</p>
+          </article>
+
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-green" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                <line x1="12" y1="2" x2="12" y2="12"></line>
+              </svg>
+            </div>
+            <h3 data-i18n="f2Title">Tắt tài khoản tiết kiệm RAM</h3>
+            <p data-i18n="f2Desc">Gạt tắt bất kỳ tài khoản nào trong Cài đặt để dừng hẳn tiến trình chạy ngầm và giải phóng RAM ngay, nhưng vẫn giữ nguyên đăng nhập trên máy. Bật lại là dùng tiếp liền.</p>
+          </article>
+
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-purple" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </div>
+            <h3 data-i18n="f3Title">Chặn xao nhãng &amp; Lịch tập trung</h3>
+            <p data-i18n="f3Desc">Tự động chặn Bảng tin Facebook, Watch, Reels, Marketplace và ẩn thanh điều hướng phía trên. Hỗ trợ tạm dừng thông báo và đặt Lịch tập trung theo tuần kèm tắt tiếng tự động.</p>
+          </article>
+
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-red" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <h3 data-i18n="f4Title">Khóa Touch ID &amp; Màn hình riêng tư</h3>
+            <p data-i18n="f4Desc">Khóa ứng dụng bằng mật khẩu kèm Touch ID khi mở máy, gập nắp hoặc sau 1–60 phút không thao tác. Hỗ trợ làm mờ màn hình khi rời cửa sổ và Phiên tạm thời (tự xóa đăng nhập khi đóng).</p>
+          </article>
+
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-pink" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="13.5" cy="6.5" r="1.5"></circle>
+                <circle cx="17.5" cy="10.5" r="1.5"></circle>
+                <circle cx="8.5" cy="7.5" r="1.5"></circle>
+                <circle cx="6.5" cy="12.5" r="1.5"></circle>
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9z"></path>
+              </svg>
+            </div>
+            <h3 data-i18n="f5Title">Giao diện gọn nhẹ &amp; 6 bảng màu Pastel</h3>
+            <p data-i18n="f5Desc">6 bảng màu Pastel tinh chọn, chế độ Sáng / Tối / Theo hệ thống, song ngữ Tiếng Việt &amp; English cùng trang Cài đặt nhúng gọn trong một cửa sổ duy nhất.</p>
+          </article>
+
+          <article class="surface-card feature-card">
+            <div class="feature-icon icon-orange" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+              </svg>
+            </div>
+            <h3 data-i18n="f6Title">Tự động cập nhật an toàn</h3>
+            <p data-i18n="f6Desc">Tự kiểm tra bản mới từ GitHub Releases, xác thực chữ ký ứng dụng và mã kiểm tra toàn vẹn trước khi cài, tự khôi phục nếu gặp lỗi. Bạn luôn có thể bật hoặc tắt trong Cài đặt.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Privacy Guarantees & Shortcuts Section -->
+    <section id="security" class="section">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-eyebrow" data-i18n="secEyebrow">Riêng tư &amp; Điều khiển</p>
+          <h2 class="section-title" data-i18n="secTitle">Cam kết bảo vệ quyền riêng tư &amp; Phím tắt macOS</h2>
+        </div>
+
+        <div class="two-col-grid">
+          <!-- Left: Plain-Language Privacy Guarantees -->
+          <div class="surface-card spec-card">
+            <div class="spec-head">
+              <span class="spec-badge icon-green" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                  <polyline points="9 12 11 14 15 10"></polyline>
+                </svg>
+              </span>
+              <h3 data-i18n="secCardTitle">Cách GomTin bảo vệ dữ liệu của bạn</h3>
+            </div>
+            <ul class="check-list">
+              <li>
+                <span class="check-mark" aria-hidden="true">✓</span>
+                <div>
+                  <strong data-i18n="secItem1Title">Không đọc tin nhắn hay mật khẩu:</strong>
+                  <span data-i18n="secItem1Desc">Mỗi tài khoản chạy trong một môi trường tách biệt hoàn toàn với hệ thống; ứng dụng không can thiệp nội dung trò chuyện, chỉ lấy duy nhất số tin chưa đọc để hiện chấm báo.</span>
+                </div>
+              </li>
+              <li>
+                <span class="check-mark" aria-hidden="true">✓</span>
+                <div>
+                  <strong data-i18n="secItem2Title">Mã hóa đăng nhập &amp; bảo vệ tệp ứng dụng:</strong>
+                  <span data-i18n="secItem2Desc">Dữ liệu đăng nhập được mã hóa an toàn trên máy Mac, còn tệp ứng dụng được khóa toàn vẹn để ngăn chỉnh sửa trái phép.</span>
+                </div>
+              </li>
+              <li>
+                <span class="check-mark" aria-hidden="true">✓</span>
+                <div>
+                  <strong data-i18n="secItem3Title">Chống phần mềm khác đọc lén phiên chat:</strong>
+                  <span data-i18n="secItem3Desc">Ứng dụng tự từ chối khởi chạy nếu phát hiện các tham số gỡ lỗi hoặc can thiệp đường truyền bất thường từ bên ngoài.</span>
+                </div>
+              </li>
+              <li>
+                <span class="check-mark" aria-hidden="true">✓</span>
+                <div>
+                  <strong data-i18n="secItem4Title">Khóa quyền theo đúng trang chính chủ:</strong>
+                  <span data-i18n="secItem4Desc">Thông báo, tải tệp, camera, micro và chia sẻ màn hình chỉ cấp đúng cho Messenger, Zalo hoặc Telegram; mọi đường dẫn ngoài đều mở bằng trình duyệt mặc định.</span>
+                </div>
+              </li>
+              <li>
+                <span class="check-mark" aria-hidden="true">✓</span>
+                <div>
+                  <strong data-i18n="secItem5Title">Không theo dõi, không quảng cáo, mã nguồn mở:</strong>
+                  <span data-i18n="secItem5Desc">Không thu thập hành vi sử dụng, không gửi dữ liệu về bên thứ ba và công khai 100% mã nguồn trên GitHub để ai cũng có thể kiểm chứng.</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Right: Shortcuts -->
+          <div class="surface-card spec-card">
+            <div class="spec-head">
+              <span class="spec-badge icon-blue" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="3"></rect>
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"></path>
+                </svg>
+              </span>
+              <h3 data-i18n="keyCardTitle">Phím tắt thao tác nhanh</h3>
+            </div>
+            <div class="shortcut-list">
+              <div class="shortcut-row">
+                <span data-i18n="keyToggleWin">Ẩn / hiện cửa sổ GomTin toàn hệ thống</span>
+                <kbd>⌃⌥M</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keySwitchAcc">Chuyển nhanh tài khoản 1 đến 9</span>
+                <kbd>⌘1 … ⌘9</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keyLock">Khóa ứng dụng ngay lập tức</span>
+                <kbd>⌘⇧L</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keySidebar">Ẩn / hiện thanh bên trái</span>
+                <kbd>⌘⇧S</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keySettings">Mở Cài đặt nhúng</span>
+                <kbd>⌘,</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keyHome">Quay về trang chủ dịch vụ hiện tại</span>
+                <kbd>⌘⇧M</kbd>
+              </div>
+              <div class="shortcut-row">
+                <span data-i18n="keyReload">Tải lại trang trò chuyện hiện tại</span>
+                <kbd>⌘R</kbd>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Installation Section -->
+    <section id="install" class="section section-tinted">
+      <div class="container">
+        <div class="section-head">
+          <p class="section-eyebrow" data-i18n="instEyebrow">Cài đặt nhanh chóng</p>
+          <h2 class="section-title" data-i18n="instTitle">Cài đặt GomTin trên macOS</h2>
+          <p class="section-desc" id="release-meta-line" data-i18n="instDesc">Tải trực tiếp từ GitHub Releases hoặc chạy một dòng lệnh tự động kiểm tra tệp an toàn trước khi cài.</p>
+        </div>
+
+        <!-- 1-Line Terminal Installer Box -->
+        <div class="terminal-card">
+          <div class="terminal-head">
+            <div class="terminal-title">
+              <span class="terminal-dot" aria-hidden="true"></span>
+              <span data-i18n="termLabel">Cài đặt nhanh bằng 1 dòng lệnh (tự kiểm tra toàn vẹn &amp; chữ ký ứng dụng):</span>
+            </div>
+            <span class="terminal-tag">macOS Terminal</span>
+          </div>
+          <div class="terminal-cmd-wrap">
+            <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/tuyennq1001/gomtin/main/install.sh | bash</code>
+            <button type="button" id="copy-install-btn" class="copy-btn" aria-label="Copy install command">
+              <svg id="copy-icon-default" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <svg id="copy-icon-done" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span id="copy-btn-text" data-i18n="copyCmd">Sao chép</span>
+            </button>
+          </div>
+          <p class="terminal-note" data-i18n="termNote">
+            Cài vào ~/Applications/GomTin.app và giữ nguyên toàn bộ phiên đăng nhập khi chạy lại để cập nhật.
+          </p>
+        </div>
+
+        <div class="divider-caption">
+          <span data-i18n="orManual">Hoặc tải file .zip thủ công từ GitHub Releases</span>
+        </div>
+
+        <!-- 3-Step Manual Install -->
+        <div class="steps-grid">
+          <article class="surface-card step-card">
+            <div class="step-num">1</div>
+            <h3 data-i18n="step1Title">Tải gói .zip chính thức</h3>
+            <p data-i18n="step1Desc">Tải phiên bản mới nhất cho máy Mac chip Apple Silicon (M1–M4), có kèm tệp mã kiểm tra toàn vẹn nếu bạn muốn đối chiếu.</p>
+            <div class="step-links">
+              <a href="https://github.com/tuyennq1001/gomtin/releases/latest" class="inline-link js-download-link" id="step-download-link" data-i18n="step1Link">Tải GomTin (.zip) ➔</a>
+              <a href="https://github.com/tuyennq1001/gomtin/releases/latest" target="_blank" rel="noopener noreferrer" class="inline-link muted-link js-checksum-link">SHA256SUMS.txt</a>
+            </div>
+          </article>
+
+          <article class="surface-card step-card">
+            <div class="step-num">2</div>
+            <h3 data-i18n="step2Title">Giải nén vào Applications</h3>
+            <p data-i18n="step2Desc">Giải nén tệp .zip và kéo GomTin.app vào thư mục Applications (hoặc ~/Applications). Nếu dùng Mac chip Intel, bạn có thể tự biên dịch cục bộ bằng ./scripts/build-local.sh --install.</p>
+          </article>
+
+          <article class="surface-card step-card">
+            <div class="step-num">3</div>
+            <h3 data-i18n="step3Title">Thêm tài khoản &amp; tùy biến</h3>
+            <p data-i18n="step3Desc">Mở GomTin, nhấn dấu + trên thanh bên để thêm Messenger, Zalo hoặc Telegram, chọn bảng màu Pastel yêu thích và bật khóa Touch ID nếu cần.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="section">
+      <div class="container faq-container">
+        <div class="section-head">
+          <p class="section-eyebrow" data-i18n="faqEyebrow">Giải đáp thắc mắc</p>
+          <h2 class="section-title" data-i18n="faqTitle">Câu hỏi thường gặp</h2>
+        </div>
+
+        <div class="faq-list">
+          <details class="surface-card faq-item">
+            <summary>
+              <span data-i18n="q1">GomTin có đọc tin nhắn, mật khẩu hay dữ liệu đăng nhập của tôi không?</span>
+              <svg class="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <p data-i18n="a1">Không bao giờ. Mỗi tài khoản chạy trong một môi trường tách biệt riêng trên máy của bạn; ứng dụng không chèn mã đọc tin nhắn hay mật khẩu và không gửi dữ liệu sử dụng ra bất kỳ máy chủ bên thứ ba nào. Toàn bộ mã nguồn và cam kết riêng tư đều công khai trên GitHub để bạn dễ dàng kiểm chứng.</p>
+          </details>
+
+          <details class="surface-card faq-item">
+            <summary>
+              <span data-i18n="q2">Tắt tài khoản để tiết kiệm RAM có làm tôi bị đăng xuất không?</span>
+              <svg class="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <p data-i18n="a2">Không. Khi bạn gạt tắt một tài khoản trong Cài đặt, GomTin chỉ dừng hẳn tiến trình chạy ngầm để giải phóng bộ nhớ nhưng vẫn giữ nguyên dữ liệu đăng nhập đã mã hóa trên máy. Khi cần dùng lại, chỉ cần gạt bật là Messenger, Zalo hoặc Telegram mở lại ngay mà không cần đăng nhập lại.</p>
+          </details>
+
+          <details class="surface-card faq-item">
+            <summary>
+              <span data-i18n="q3">Khóa ứng dụng, Touch ID và Màn hình riêng tư bảo vệ như thế nào?</span>
+              <svg class="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <p data-i18n="a3">Khi bật khóa ứng dụng, GomTin che kín toàn bộ nội dung chat, ẩn thanh bên, tạm giữ thông báo và khóa các thao tác mở rộng cho đến khi bạn mở khóa bằng mật khẩu hoặc Touch ID. Ứng dụng tự động khóa khi bạn khóa màn hình macOS, gập máy hoặc không thao tác sau 1, 5, 15 hay 60 phút.</p>
+          </details>
+
+          <details class="surface-card faq-item">
+            <summary>
+              <span data-i18n="q4">Tính năng tự động cập nhật hoạt động ra sao và có an toàn không?</span>
+              <svg class="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <p data-i18n="a4">GomTin tự kiểm tra phiên bản mới từ GitHub Releases mà không gửi kèm thông tin cá nhân, tải bản cập nhật về, đối chiếu mã kiểm tra toàn vẹn và chữ ký ứng dụng trên macOS rồi mới thay thế an toàn (tự khôi phục bản cũ nếu có sự cố). Bạn luôn có thể tắt tự động cập nhật trong mục Cài đặt → Giao diện.</p>
+          </details>
+
+          <details class="surface-card faq-item">
+            <summary>
+              <span data-i18n="q5">GomTin có hỗ trợ cả Apple Silicon (M1–M4) và Mac Intel không?</span>
+              <svg class="faq-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <p data-i18n="a5">Gói tải sẵn trên GitHub Releases hiện ưu tiên bản chạy gốc cho máy Mac chip Apple Silicon (M1–M4). Nếu bạn dùng Mac chip Intel hoặc muốn tự biên dịch từ mã nguồn, chỉ cần tải kho mã nguồn về và chạy lệnh ./scripts/build-local.sh --install để hệ thống tự kiểm thử và cài đặt bản tương thích với máy của bạn.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Banner -->
+    <section class="section cta-section">
+      <div class="container">
+        <div class="cta-banner">
+          <h2 data-i18n="ctaTitle">Sẵn sàng giữ góc làm việc gọn gàng với GomTin?</h2>
+          <p data-i18n="ctaDesc">Miễn phí, mã nguồn mở Apache-2.0, không quảng cáo và không thu thập dữ liệu. Tải về cho macOS và gom trọn Messenger, Zalo, Telegram vào một cửa sổ thanh lịch.</p>
+          <div class="cta-actions">
+            <a href="https://github.com/tuyennq1001/gomtin/releases/latest" class="btn-cta-white js-download-link">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8.92-2.85-.9.04-2 .6-2.65 1.35-.58.66-1.09 1.73-.95 2.76 1 .08 2.05-.51 2.68-1.26z"></path>
+              </svg>
+              <span data-i18n="ctaDownload">Tải GomTin cho macOS</span>
+            </a>
+            <a href="https://github.com/tuyennq1001/gomtin" target="_blank" rel="noopener noreferrer" class="btn-cta-ghost" data-i18n="ctaStar">
+              ⭐ Tặng sao trên GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/icon.png" alt="GomTin" width="22" height="22">
+        <span data-i18n="footerTagline">GomTin — Trung tâm nhắn tin tập trung &amp; riêng tư cho macOS</span>
+      </div>
+      <p class="footer-meta">
+        <span data-i18n="footerCreditPrefix">Phát triển bởi</span>
+        <a href="https://github.com/tuyennq1001" target="_blank" rel="noopener noreferrer">tuyennq1001</a>
+        <span>•</span>
+        <span data-i18n="footerLicensePrefix">Giấy phép mã nguồn mở</span>
+        <a href="https://github.com/tuyennq1001/gomtin/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Apache-2.0</a>
+      </p>
+      <div class="footer-links">
+        <a href="https://github.com/tuyennq1001/gomtin" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <span>•</span>
+        <a href="https://github.com/tuyennq1001/gomtin/releases" target="_blank" rel="noopener noreferrer" data-i18n="footerReleases">Phiên bản</a>
+        <span>•</span>
+        <a href="https://github.com/tuyennq1001/gomtin/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer" data-i18n="footerPrivacy">Quyền riêng tư</a>
+        <span>•</span>
+        <a href="https://github.com/tuyennq1001/gomtin/issues" target="_blank" rel="noopener noreferrer" data-i18n="footerIssues">Báo lỗi &amp; Góp ý</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
