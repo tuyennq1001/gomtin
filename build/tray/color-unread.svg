@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <path d="M32 10c15 0 26 9.5 26 21.5S47 53 32 53c-3.5 0-6.8-.5-9.8-1.4L12 57c-1.8.9-3.6-.8-2.8-2.6l2.4-6.4C8.1 44 6 38.1 6 31.5 6 19.5 17 10 32 10z" fill="#3B94F6"/>
-  <path d="M18 30c3-6 9-6 12 0" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M34 30c3-6 9-6 12 0" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M28 36c1.5 5 6.5 5 8 0" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="51" cy="14" r="9.5" fill="#EF4E55" stroke="#fff" stroke-width="3"/>
+  <defs>
+    <linearGradient id="tray-g-grad" x1="10%" y1="90%" x2="90%" y2="10%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="45%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(-17.15, -17.15) scale(0.096)">
+    <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="url(#tray-g-grad)"/>
+    <path d="M604 396 A130 130 0 1 0 640 520 L640 502 L528 502" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="52" cy="13" r="9.5" fill="#EF4E55" stroke="#fff" stroke-width="3"/>
 </svg>
