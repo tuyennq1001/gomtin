@@ -13,7 +13,7 @@ const { registerAppPage } = require('./app-pages');
 
 const ACTIONS = new Set([
   'getState', 'addAccount', 'renameAccount', 'toggleAccount', 'removeAccount',
-  'setFocus', 'setAppearance', 'close',
+  'setFocus', 'setAppearance', 'checkUpdates', 'installUpdate', 'setAutoUpdate', 'openReleasePage', 'close',
 ]);
 
 class SettingsWindow {

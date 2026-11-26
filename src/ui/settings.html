@@ -189,6 +189,41 @@
           </div>
         </div>
       </div>
+
+      <!-- Production Update Card (Hard-disabled on Dev builds) -->
+      <div class="gt-card" id="update-card">
+        <div class="card-head">
+          <div class="card-title-group">
+            <span class="card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+            <h1 id="update-card-title">Cập nhật ứng dụng</h1>
+          </div>
+          <span id="update-version-pill" class="count-pill">v1.0.0</span>
+        </div>
+
+        <p id="update-dev-note" class="dev-banner compact" hidden></p>
+
+        <div id="update-prod-body">
+          <div class="setting-row">
+            <div class="setting-copy">
+              <span id="update-auto-title" class="setting-title">Tự động kiểm tra &amp; tải cập nhật</span>
+              <span id="update-auto-sub" class="setting-sub">Kiểm tra định kỳ từ GitHub Releases và xác thực SHA-256</span>
+            </div>
+            <label class="toggle-wrap">
+              <input id="auto-update-toggle" type="checkbox" class="toggle">
+              <span class="toggle-track" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <progress id="update-progress" class="progress-bar" max="100" value="0" hidden></progress>
+
+          <div class="update-footer">
+            <p id="update-status" class="status-msg" role="status"></p>
+            <button id="update-action-btn" type="button" class="btn secondary">Kiểm tra cập nhật</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 

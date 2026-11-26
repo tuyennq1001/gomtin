@@ -40,9 +40,9 @@ const FORBIDDEN = {
   'IPC channel between page and app': [/\b(ipcMain|ipcRenderer|contextBridge)\b/, APP_UI_FILES],
   'reads or writes cookies': [/\bcookies\s*\./],
   'intercepts or inspects network traffic': [/\b(webRequest|protocol\.handle|debugger\.attach)\b/],
-  'makes its own network requests': [/\b(fetch\s*\(|net\.request|require\(['"]https?['"]\)|XMLHttpRequest)/],
+  'makes its own network requests': [/\b(fetch\s*\(|net\.request|require\(['"]https?['"]\)|XMLHttpRequest)/, ['updater.js']],
   'uploads crash reports': [/\bcrashReporter\b/],
-  'phones home for updates': [/\bautoUpdater\b/],
+  'uses opaque third-party autoUpdater': [/\bautoUpdater\b/],
   'reads page console output': [/console-message/],
 };
 
@@ -121,11 +121,19 @@ test('accounts never share a session', () => {
   assert.match(account, /partition: this\.partition,/);
 });
 
-test('no updater or self-update modules exist and no external GitHub calls remain', () => {
-  assert.ok(!fs.existsSync(path.join(SRC, 'updater.js')));
-  assert.ok(!fs.existsSync(path.join(SRC, 'self-update.js')));
+test('updater is strictly scoped to tuyennq1001/gomtin, cookie-less, SHA-256 verified, and hard-disabled in Dev', () => {
+  const up = code('updater.js');
+  const su = code('self-update.js');
+  assert.match(up, /const REPO = 'tuyennq1001\/gomtin'/);
+  assert.match(up, /credentials: 'omit'/);
+  assert.match(up, /useSessionCookies: false/);
+  assert.match(up, /createHash\('sha256'\)/);
+  assert.match(up, /SHA256SUMS\.txt/);
+  assert.match(up, /if \(this\.isDev\) return;/);
+  assert.match(up, /if \(this\.isDev\) return \{ ok: false, reason: 'dev' \};/);
+  assert.match(su, /codesign', \['--verify', '--deep', '--strict'/);
   for (const s of sources) {
-    assert.doesNotMatch(s.code, /api\.github\.com|github\.com\/thangldw/, `unexpected GitHub URL in ${s.file}`);
+    assert.doesNotMatch(s.code, /thangldw\/thrum/, `legacy upstream URL in ${s.file}`);
   }
 });
 

@@ -23,6 +23,7 @@ const { AppLock } = require('./lock');
 const { Dnd, HOUR } = require('./dnd');
 const { normalizeRules, MAX_RULES } = require('./focus');
 const { SettingsWindow } = require('./settings-window');
+const { Updater } = require('./updater');
 
 // Dev vs Prod environment separation: Dev uses its own bundle ID, isolated
 // userData folder and clear visual DEV indicators so testing never touches
@@ -85,6 +86,7 @@ let overlay = null;
 let lock = null;
 let dnd = null;
 let settingsWin = null;
+let updater = null;
 let winBadgeImage = null;
 let isQuitting = false;
 const configuredPartitions = new Set();
@@ -826,6 +828,7 @@ function settingsState() {
     isDev: IS_DEV,
     appName: APP_NAME,
     theme: uiThemeState(),
+    update: updater ? updater.getState() : null,
     accounts: settings.get('accounts').map((a) => ({
       ...a,
       active: a.id === activeId,
@@ -1003,6 +1006,25 @@ function zoom(delta) {
   acc.wc.setZoomLevel(delta === 0 ? 0 : acc.wc.getZoomLevel() + delta);
 }
 
+function updateMenuItem(locked) {
+  if (IS_DEV) return { label: t('menuUpdatesDevOff'), enabled: false };
+  const st = updater ? updater.getState() : null;
+  if (st && st.status === 'ready' && st.availableVersion) {
+    return {
+      label: t('menuInstallUpdate', { version: st.availableVersion }),
+      click: () => updater.installNow(),
+    };
+  }
+  return {
+    label: t('menuCheckUpdates'),
+    enabled: !locked,
+    click: () => {
+      openSettings('appearance');
+      if (updater) updater.check({ silent: false });
+    },
+  };
+}
+
 function buildAppMenu() {
   const { locked } = lock;
   const cur = active();
@@ -1011,6 +1033,7 @@ function buildAppMenu() {
       label: app.name,
       submenu: [
         { role: 'about' },
+        updateMenuItem(locked),
         { type: 'separator' },
         { label: t('menuSettings'), accelerator: 'Cmd+,', enabled: !locked, click: () => openSettings() },
         { type: 'separator' },
@@ -1023,6 +1046,7 @@ function buildAppMenu() {
     }] : [{
       label: t('menuFile'),
       submenu: [
+        updateMenuItem(locked),
         { label: t('menuSettings'), accelerator: 'Ctrl+,', enabled: !locked, click: () => openSettings() },
         { type: 'separator' },
         { role: 'quit' },
@@ -1205,6 +1229,13 @@ function createWindow({ show }) {
       removeAccount,
       setFocus: setFocusSchedule,
       setAppearance,
+      checkUpdates: () => (updater ? updater.check({ silent: false }) : { ok: false }),
+      installUpdate: () => (updater ? updater.installNow() : { ok: false }),
+      setAutoUpdate: (on) => (updater ? updater.setEnabled(Boolean(on)) : { ok: false }),
+      openReleasePage: () => {
+        if (updater) openExternal(updater.getState().releaseUrl);
+        return { ok: true };
+      },
     },
     onOpen: () => {
       applyVisibility();
@@ -1261,6 +1292,20 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     tray = new AppTray({ appName: APP_NAME, toggleWindow, buildMenu: trayMenu });
+    updater = new Updater({
+      settings,
+      isDev: IS_DEV,
+      currentVersion: app.getVersion(),
+      onChange: () => {
+        rebuildMenus();
+        pushUi();
+      },
+      onQuitForUpdate: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    });
+    updater.start();
 
     createWindow({ show: !startedHidden() });
     lock = new AppLock({
@@ -1300,7 +1345,10 @@ if (!app.requestSingleInstanceLock()) {
     if (isMac) app.on('did-become-active', () => { if (mainWindow && !mainWindow.isVisible()) showWindow(); });
   });
 
-  app.on('before-quit', () => { isQuitting = true; });
+  app.on('before-quit', () => {
+    isQuitting = true;
+    if (updater) updater.stop();
+  });
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
   });

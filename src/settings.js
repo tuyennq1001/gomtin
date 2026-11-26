@@ -50,6 +50,8 @@ const SCHEMA = {
   restoreLastChat: bool(true),
   ephemeral: bool(false),
   muteAudioWhenPaused: bool(true),
+  autoCheckUpdates: bool(true),
+  lastUpdateCheck: num(0, (v) => v >= 0),
   trayHintShown: bool(false),
   // 0 = notifications on, -1 = paused until resumed, otherwise epoch ms.
   dndUntil: num(0, (v) => v === -1 || v >= 0),

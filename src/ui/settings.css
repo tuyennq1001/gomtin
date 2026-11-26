@@ -665,7 +665,47 @@ body.settings {
 .status-msg.error { color: var(--error); }
 .status-msg.saved { color: var(--accent); }
 
+/* ---- Update Card ---- */
+.dev-banner.compact {
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 12.5px;
+}
+
+.progress-bar {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--pill-track);
+}
+.progress-bar::-webkit-progress-bar {
+  background: var(--pill-track);
+  border-radius: 999px;
+}
+.progress-bar::-webkit-progress-value {
+  background: var(--accent-grad);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.update-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.update-footer .btn { flex-shrink: 0; }
+
 @media (max-width: 520px) {
   .theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .setting-row { flex-direction: column; align-items: flex-start; }
+  .update-footer { flex-direction: column; align-items: stretch; }
 }

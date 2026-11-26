@@ -108,6 +108,70 @@ function applyThemeAndLocale() {
   for (const btn of document.querySelectorAll('[data-lang]')) {
     btn.setAttribute('aria-checked', String(btn.dataset.lang === lang));
   }
+
+  $('update-card-title').textContent = t('updateCardTitle');
+  $('update-auto-title').textContent = t('updateAutoTitle');
+  $('update-auto-sub').textContent = t('updateAutoSub');
+  $('update-dev-note').textContent = t('updateDevDisabled');
+}
+
+function renderUpdate() {
+  const u = state && state.update;
+  if (!u) return;
+
+  const verText = u.disabledDev ? `v${u.currentVersion} · DEV` : `v${u.currentVersion}`;
+  $('update-version-pill').textContent = verText;
+  $('update-dev-note').hidden = !u.disabledDev;
+  $('update-prod-body').hidden = Boolean(u.disabledDev);
+  if (u.disabledDev) return;
+
+  $('auto-update-toggle').checked = Boolean(u.enabled);
+
+  const statusEl = $('update-status');
+  const btn = $('update-action-btn');
+  const prog = $('update-progress');
+
+  statusEl.classList.remove('error', 'saved');
+  btn.classList.remove('primary', 'secondary');
+  btn.disabled = false;
+  prog.hidden = u.status !== 'downloading';
+
+  if (u.status === 'checking') {
+    statusEl.textContent = t('updateChecking');
+    btn.textContent = t('updateCheckBtn');
+    btn.classList.add('secondary');
+    btn.disabled = true;
+  } else if (u.status === 'downloading') {
+    statusEl.textContent = t('updateDownloading', { version: u.availableVersion, pct: u.progress || 0 });
+    prog.value = Math.max(5, Math.min(100, u.progress || 0));
+    btn.textContent = `${u.progress || 0}%`;
+    btn.classList.add('secondary');
+    btn.disabled = true;
+  } else if (u.status === 'ready') {
+    statusEl.textContent = t('updateReadyStatus', { version: u.availableVersion });
+    statusEl.classList.add('saved');
+    btn.textContent = t('updateReadyBtn', { version: u.availableVersion });
+    btn.classList.add('primary');
+  } else if (u.status === 'available-manual') {
+    statusEl.textContent = t('updateManualStatus', { version: u.availableVersion });
+    statusEl.classList.add('saved');
+    btn.textContent = t('updateManualBtn', { version: u.availableVersion });
+    btn.classList.add('primary');
+  } else if (u.status === 'up-to-date') {
+    statusEl.textContent = t('updateUpToDate', { version: u.currentVersion });
+    statusEl.classList.add('saved');
+    btn.textContent = t('updateCheckBtn');
+    btn.classList.add('secondary');
+  } else if (u.status === 'error') {
+    statusEl.textContent = t('updateError', { err: u.error || '' });
+    statusEl.classList.add('error');
+    btn.textContent = t('updateCheckBtn');
+    btn.classList.add('secondary');
+  } else {
+    statusEl.textContent = t('updateUpToDate', { version: u.currentVersion });
+    btn.textContent = t('updateCheckBtn');
+    btn.classList.add('secondary');
+  }
 }
 
 // ---- Accounts
@@ -486,6 +550,18 @@ for (const btn of document.querySelectorAll('[data-lang]')) {
   btn.addEventListener('click', () => api.setAppearance({ language: btn.dataset.lang }));
 }
 
+$('auto-update-toggle').addEventListener('change', (e) => {
+  api.setAutoUpdate(e.currentTarget.checked);
+});
+
+$('update-action-btn').addEventListener('click', () => {
+  const u = state && state.update;
+  if (!u || u.disabledDev) return;
+  if (u.status === 'ready') api.installUpdate();
+  else if (u.status === 'available-manual') api.openReleasePage();
+  else api.checkUpdates();
+});
+
 // ---- State sync
 
 function render(next) {
@@ -493,6 +569,7 @@ function render(next) {
   state = next;
   applyThemeAndLocale();
   renderAccounts();
+  renderUpdate();
   if (!dirty) {
     rules = JSON.parse(JSON.stringify(state.focus.rules));
     $('focus-enabled').checked = state.focus.enabled;

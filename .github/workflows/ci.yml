@@ -34,6 +34,6 @@ jobs:
           # require('electron') downloads it lazily in every test file that loads it, and
           # those parallel downloads race (seen on Windows: "failed to create directory").
           ELECTRON_OVERRIDE_DIST_PATH: ${{ runner.temp }}
-      - name: Syntax check main process
+      - name: Syntax check source files
         shell: bash
-        run: for f in src/*.js; do node --check "$f"; done
+        run: for f in src/*.js src/ui/*.js; do node --check "$f"; done

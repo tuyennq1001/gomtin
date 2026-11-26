@@ -128,7 +128,7 @@ Khi giải quyết bất kỳ lỗi hoặc phát triển tính năng nào, bắt
   - Icon riêng biệt: `build/icon-dev.png` (viền cam + badge `DEV` tròn nổi bật trên Dock)
   - Output build: `dist-dev/mac-arm64/GomTin Dev.app`
   - Nhận diện thị giác: Tiêu đề `[DEV] GomTin Dev`, badge capsule `DEV` cam trên sidebar/settings/overlay, tooltip tray `GomTin Dev`.
-  - Auto-Update: Vô hiệu hóa hoàn toàn (không tồn tại module updater ngoài).
+  - Auto-Update: **Vô hiệu hóa cứng** (`isDev === true` chặn mọi timer, mọi network request và mọi thao tác cập nhật trong `src/updater.js`).
 
 - **Bản Sản phẩm (Production)**:
   - Display Name: `GomTin`
@@ -137,6 +137,7 @@ Khi giải quyết bất kỳ lỗi hoặc phát triển tính năng nào, bắt
   - Icon chính thức: `build/icon.png` (Bóng chat Mochi Sky Blue kawaii trên nền Dark Charcoal, đồng bộ phong cách với Buzzy)
   - Output build: `dist/mac-arm64/GomTin.app`
   - Vị trí cài đặt cục bộ: `~/Applications/GomTin.app`
+  - Auto-Update Production: Kiểm tra định kỳ + tải ngầm trong nền từ GitHub Releases `tuyennq1001/gomtin` (không cookie, xác thực `SHA256SUMS.txt` + macOS `codesign --verify --deep --strict`, swap nguyên tử có rollback), có toggle bật/tắt và nút kiểm tra ngay trong Cài đặt.
   - Bảo mật nhị phân: macOS Hardened Runtime + Electron Fuses (`EnableCookieEncryption`, `OnlyLoadAppFromAsar`, `EnableEmbeddedAsarIntegrityValidation`, tắt `RunAsNode` / `NodeOptions` / `NodeCliInspect`).
 
 ---
@@ -158,6 +159,9 @@ npm run build:prod
 
 # 5. Build, verify và cài đặt bản Production vào ~/Applications/GomTin.app:
 ./scripts/build-local.sh --install
+
+# 6. Phát hành một lệnh (Parity Gate + gói zip + SHA256SUMS + tag + GitHub Release):
+./scripts/release.sh <version> [--install]
 ```
 
 ---
@@ -171,7 +175,7 @@ npm run build:prod
   - Chỉ load file HTML cục bộ (`loadFile`), CSP chặt (`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'`), khóa `will-navigate` và `setWindowOpenHandler`, IPC chỉ chấp nhận đúng `webContents` của chính view đó và đúng whitelist `ACTIONS`.
   - Giao diện theo ngôn ngữ **Soft Kawaii Glass** (đồng bộ Buzzy): 6 bảng màu pastel (`blue`, `green`, `pink`, `orange`, `purple`, `red`), chế độ `System / Light / Dark`, song ngữ `Tiếng Việt / English`, font `SF Pro Rounded` hỗ trợ đầy đủ dấu tiếng Việt Unicode.
   - Đảm bảo 4 trạng thái `Loading / Empty / Error / Loaded` và `Zero Layout Shift` (sidebar cố định `58px`).
-- **Không tự ý gọi mạng ngoài**:
-  - Ứng dụng không có telemetry, không có updater gọi ra GitHub hay server bên thứ ba (`test/privacy.test.js` kiểm tra tự động).
+- **Kiểm soát chặt kết nối mạng ngoài**:
+  - Ứng dụng không có telemetry. Kết nối mạng duy nhất ngoài các trang chat là `src/updater.js` (chỉ chạy trên bản Production, tắt cứng trên bản Dev), chỉ gọi tới GitHub Releases của `tuyennq1001/gomtin` với `credentials: 'omit'` / `useSessionCookies: false` và bắt buộc đối chiếu SHA-256 (`test/privacy.test.js` kiểm tra tự động).
 - **Quản lý tài khoản On/Off**:
   - Tắt tài khoản trong Settings sẽ hủy `WebContentsView` ngay để giải phóng RAM nhưng **giữ nguyên session partition trên đĩa**; bật lại sẽ khôi phục phiên đăng nhập ngay lập tức.
