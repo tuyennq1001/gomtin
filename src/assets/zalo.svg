@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#0068FF"/>
+  <path d="M32 10.5c13.8 0 24 8.6 24 19.7S45.8 49.8 32 49.8c-3.9 0-7.6-.7-10.9-1.9-3.3 2.5-7.3 4.4-10.7 5-1.2.2-2-1-1.3-2 1.6-2.3 2.6-4.7 3-7C9.5 40.3 8 35.5 8 30.2 8 19.1 18.2 10.5 32 10.5z" fill="#FFFFFF"/>
+  <!-- Bold rounded "Zalo" wordmark in official Zalo Blue -->
+  <path d="M13.5 23.8h7.7l-7.7 12.8h7.9" fill="none" stroke="#0068FF" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="28.6" cy="32.8" r="3.8" fill="none" stroke="#0068FF" stroke-width="2.7"/>
+  <path d="M32.4 28.9v7.8" fill="none" stroke="#0068FF" stroke-width="2.7" stroke-linecap="round"/>
+  <path d="M37.4 22.8v13.9" fill="none" stroke="#0068FF" stroke-width="2.7" stroke-linecap="round"/>
+  <circle cx="46.0" cy="32.8" r="3.85" fill="none" stroke="#0068FF" stroke-width="2.7"/>
+</svg>

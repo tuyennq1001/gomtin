@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('overlay', {
   cancel: () => call('cancel'),
   retry: () => call('retry'),
   reset: () => call('reset'),
+  openSettings: () => call('openSettings'),
   onState: (callback) => ipcRenderer.on('overlay:state', (_event, state) => callback(state)),
 });

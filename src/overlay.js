@@ -14,8 +14,8 @@ const path = require('path');
 const { registerAppPage, isAppPage } = require('./app-pages');
 
 // Highest priority first: a locked app never reveals anything else.
-const LAYERS = ['lock', 'setup', 'crashed', 'offline'];
-const ACTIONS = new Set(['getState', 'unlock', 'touchId', 'setPassword', 'cancel', 'retry', 'reset']);
+const LAYERS = ['lock', 'setup', 'crashed', 'offline', 'empty'];
+const ACTIONS = new Set(['getState', 'unlock', 'touchId', 'setPassword', 'cancel', 'retry', 'reset', 'openSettings']);
 
 class Overlay {
   /**
@@ -23,12 +23,15 @@ class Overlay {
    * @param {Record<string, Function>} handlers  action name -> async (payload) => result
    * @param {Function} focusContent  gives keyboard focus back to the page below
    */
-  constructor(win, handlers, focusContent) {
+  constructor(win, handlers, focusContent, getTheme = null) {
     this.win = win;
     this.handlers = handlers;
     this.focusContent = focusContent;
+    this.getTheme = getTheme;
     this.layers = new Map();
     this.view = null;
+    this.insetLeft = 0;
+    this.bgColor = '#151821';
 
     win.on('resize', () => this.layout());
 
@@ -55,7 +58,7 @@ class Overlay {
       },
     });
     // Opaque from the first frame, before the page has loaded.
-    this.view.setBackgroundColor('#111214');
+    this.view.setBackgroundColor(this.bgColor);
     const wc = this.view.webContents;
     registerAppPage(wc);
     // The overlay never navigates or opens windows.
@@ -65,13 +68,20 @@ class Overlay {
     wc.loadFile(path.join(__dirname, 'ui', 'overlay.html'));
   }
 
+  setBackgroundColor(hex) {
+    if (!hex) return;
+    this.bgColor = hex;
+    if (this.view) this.view.setBackgroundColor(hex);
+  }
+
   top() {
     return LAYERS.find((name) => this.layers.has(name)) ?? null;
   }
 
   state() {
     const name = this.top();
-    return name ? { mode: name, ...this.layers.get(name) } : { mode: null };
+    const theme = this.getTheme ? this.getTheme() : null;
+    return name ? { mode: name, theme, ...this.layers.get(name) } : { mode: null, theme };
   }
 
   setLayer(name, data) {
@@ -110,10 +120,15 @@ class Overlay {
     this.layout();
   }
 
-  layout() {
+  layout(insetLeft = this.insetLeft) {
+    this.insetLeft = insetLeft;
     if (!this.view) return;
     const [width, height] = this.win.getContentSize();
-    this.view.setBounds({ x: 0, y: 0, width, height });
+    // Lock and setup cover the entire window (including the sidebar);
+    // offline, crashed and empty only cover the active chat pane.
+    const mode = this.top();
+    const x = mode === 'lock' || mode === 'setup' ? 0 : this.insetLeft;
+    this.view.setBounds({ x, y: 0, width: Math.max(0, width - x), height });
   }
 
   push() {

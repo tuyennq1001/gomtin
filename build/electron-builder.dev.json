@@ -1,0 +1,44 @@
+{
+  "appId": "com.tuyennq.gomtin.dev",
+  "productName": "GomTin Dev",
+  "extraMetadata": {
+    "name": "gomtin-dev",
+    "productName": "GomTin Dev",
+    "env": "development"
+  },
+  "files": [
+    "src/**/*",
+    "package.json"
+  ],
+  "directories": {
+    "buildResources": "build",
+    "output": "dist-dev"
+  },
+  "electronFuses": {
+    "enableCookieEncryption": true,
+    "runAsNode": false,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true,
+    "grantFileProtocolExtraPrivileges": true
+  },
+  "mac": {
+    "icon": "build/icon-dev.png",
+    "target": [
+      "dir"
+    ],
+    "category": "public.app-category.social-networking",
+    "identity": "Apple Development: tuyennq1001@gmail.com (DGWT97FSZ4)",
+    "timestamp": "none",
+    "hardenedRuntime": true,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "artifactName": "GomTin-Dev-${version}-mac-${arch}.${ext}",
+    "extendInfo": {
+      "NSUserNotificationAlertStyle": "alert",
+      "NSMicrophoneUsageDescription": "GomTin Dev calls need the microphone.",
+      "NSCameraUsageDescription": "GomTin Dev video calls need the camera."
+    }
+  }
+}
