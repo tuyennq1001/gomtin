@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="c-tile" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EEF3FA"/>
+    </linearGradient>
+    <linearGradient id="c-grad" x1="10%" y1="90%" x2="90%" y2="10%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="45%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="c-sheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="c-tile-shadow" x="-12%" y="-10%" width="124%" height="126%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0F172A" flood-opacity="0.20"/>
+    </filter>
+    <filter id="c-mark-shadow" x="-14%" y="-12%" width="128%" height="132%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#2563EB" flood-opacity="0.26"/>
+    </filter>
+  </defs>
+
+  <!-- macOS safe-area 824x824 squircle centered in 1024x1024 -->
+  <g filter="url(#c-tile-shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#c-tile)"/>
+    <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#0F172A" stroke-opacity="0.06" stroke-width="4"/>
+  </g>
+
+  <!-- GomTin original G-bubble brand mark -->
+  <g filter="url(#c-mark-shadow)">
+    <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="url(#c-grad)"/>
+    <path d="M512 232 C346 232 222 346 222 496 C222 574 258 643 316 690 C322 695 325 702 325 710 L326 768 C326 786 346 797 362 789 L428 757 C435 754 442 753 449 755 C469 759 490 760 512 760 C678 760 802 646 802 496 C802 346 678 232 512 232 Z" fill="url(#c-sheen)"/>
+    <path d="M604 396 A130 130 0 1 0 640 520 L640 502 L528 502" fill="none" stroke="#FFFFFF" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

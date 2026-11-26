@@ -8,7 +8,23 @@
   <b>Distraction-free, privacy-first multi-account desktop chat hub for Messenger, Zalo &amp; Telegram on macOS</b>
 </p>
 
+<p align="center">
+  <a href="https://tuyennq1001.github.io/gomtin/"><b>Homepage</b></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/tuyennq1001/gomtin/releases/latest">Latest Release</a>
+  &nbsp;&middot;&nbsp;
+  <a href="PRIVACY.md">Privacy Policy</a>
+</p>
+
 ---
+
+## Install on macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tuyennq1001/gomtin/main/install.sh | bash
+```
+
+Downloads the latest macOS release, verifies `SHA256SUMS.txt` and `codesign --verify --deep --strict`, installs into `~/Applications/GomTin.app`, and keeps existing sessions intact on updates. You can also download the `.zip` archive directly from [GitHub Releases](https://github.com/tuyennq1001/gomtin/releases/latest).
 
 ## Features
 
